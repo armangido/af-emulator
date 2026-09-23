@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Assault Fire Emulator — Registration</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="shell">
+    <section class="card">
+      <div class="eyebrow">AF EMULATOR // LOCAL ACCOUNT SERVICE</div>
+      <h1>Create your account</h1>
+      <p class="lead">
+        Register an account for the community Assault Fire preservation server.
+      </p>
+
+      {% if registered %}
+        <div class="notice success" role="status">
+          <strong>Registration complete.</strong>
+          <span>Username: {{ registered.username }}</span>
+          <span>UIN: {{ registered.uin }}</span>
+        </div>
+        <p class="small">
+          The account is stored in SQLite. Launcher credential enforcement will
+          be connected after the PH AP cmd-3 login fields are verified.
+        </p>
+        <a class="button secondary" href="{{ url_for('register') }}">Register another account</a>
+      {% else %}
+        {% if error %}
+          <div class="notice error" role="alert">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" action="{{ url_for('register') }}" autocomplete="on">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <label for="username">Username</label>
+          <input
+            id="username"
+            name="username"
+            type="text"
+            value="{{ entered_username }}"
+            minlength="3"
+            maxlength="24"
+            pattern="[A-Za-z0-9._-]{3,24}"
+            autocomplete="username"
+            required
+          >
+          <div class="hint">3–24 characters: letters, numbers, dot, underscore or dash.</div>
+
+          <label for="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            minlength="8"
+            maxlength="72"
+            autocomplete="new-password"
+            required
+          >
+
+          <label for="confirm_password">Confirm password</label>
+          <input
+            id="confirm_password"
+            name="confirm_password"
+            type="password"
+            minlength="8"
+            maxlength="72"
+            autocomplete="new-password"
+            required
+          >
+
+          <button class="button" type="submit">Create account</button>
+        </form>
+      {% endif %}
+
+      <footer>
+        Unofficial preservation project. No original game credentials are required or stored.
+      </footer>
+    </section>
+  </main>
+</body>
+</html>
