@@ -16,10 +16,10 @@ if str(ROOT) not in sys.path:
 
 from server.account_db import (  # noqa: E402
     AccountError,
+    DEFAULT_DB_PATH,
     DuplicateUsername,
     account_count,
     create_account,
-    init_db,
 )
 
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -39,7 +39,7 @@ app.config.update(
     SESSION_COOKIE_SAMESITE="Lax",
 )
 
-DB_PATH = init_db()
+DB_PATH = DEFAULT_DB_PATH
 
 
 def csrf_token() -> str:
