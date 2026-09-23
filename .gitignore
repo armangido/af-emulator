@@ -19,6 +19,7 @@ private/
 assaultfire_player_state.json
 assaultfire_clan_state.json
 *.sqlite
+*.sqlite3
 *.db
 
 # Local/generated mappings
