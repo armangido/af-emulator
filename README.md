@@ -126,6 +126,7 @@ New to the project?
 - **[FAQ](docs/FAQ.md)** — common crashes, RSA/APClient questions, ports, The Altar status, and troubleshooting.
 - **[Launcher / AP / TGame error reference](docs/LAUNCHER_ERRORS.md)** — known AP/AUTH errors, TCLS launcher logs, TGame popups, security warning codes, crash codes, and what each one usually means.
 - **[Architecture + port map](docs/ARCHITECTURE.md)** — quick diagram of how TCLS, TGame, the emulator, bridge, and AFDEV fit together.
+- **[Registration website + SQLite accounts](docs/REGISTRATION_WEBSITE.md)** — local account registration, UIN allocation, password hashing, and the planned v94 AUTH integration boundary.
 - **[Vital launch requirements](docs/LAUNCH_REQUIREMENTS.md)** — TCLS → TGame handoff, shared memory, validated TCLS runtime patch, TGame compatibility patch, and failure diagnosis.
 - **[Vital setup notes](docs/VITAL_SETUP_NOTES.md)** — key, hosts, datetime, legacy security-driver compatibility, and isolation warnings.
 - **[Disclaimer](DISCLAIMER.md)** — project scope, legacy driver compatibility, and responsibility for user-performed system changes.
