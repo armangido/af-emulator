@@ -19,10 +19,6 @@ from server.account_db import (
 )
 
 
-def fast_hash_password(password, *, salt=None, iterations=2):
-    return account_db._hash_password.__wrapped__(password, salt=salt, iterations=2)
-
-
 class AccountDbTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
