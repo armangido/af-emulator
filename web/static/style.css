@@ -1,0 +1,143 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #090d12;
+  color: #eef4f8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 20% 0%, rgba(53, 120, 168, 0.18), transparent 32rem),
+    linear-gradient(145deg, #090d12 0%, #101821 55%, #080b0f 100%);
+}
+
+.shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 32px 18px;
+}
+
+.card {
+  width: min(100%, 520px);
+  padding: 34px;
+  border: 1px solid #283847;
+  border-radius: 14px;
+  background: rgba(12, 18, 24, 0.94);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
+}
+
+.eyebrow {
+  margin-bottom: 12px;
+  color: #7fb8dc;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+}
+
+h1 {
+  margin: 0 0 10px;
+  font-size: clamp(2rem, 6vw, 3rem);
+  line-height: 1;
+}
+
+.lead {
+  margin: 0 0 28px;
+  color: #aebdca;
+  line-height: 1.6;
+}
+
+form {
+  display: grid;
+  gap: 10px;
+}
+
+label {
+  margin-top: 8px;
+  color: #dbe6ee;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+input {
+  width: 100%;
+  border: 1px solid #344858;
+  border-radius: 9px;
+  padding: 13px 14px;
+  background: #0a1117;
+  color: #f7fbff;
+  font: inherit;
+  outline: none;
+}
+
+input:focus {
+  border-color: #6faed6;
+  box-shadow: 0 0 0 3px rgba(111, 174, 214, 0.16);
+}
+
+.hint,
+.small,
+footer {
+  color: #8495a3;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  margin-top: 16px;
+  border: 0;
+  border-radius: 9px;
+  padding: 13px 18px;
+  background: #dfeef7;
+  color: #071018;
+  font: inherit;
+  font-weight: 850;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button:hover {
+  filter: brightness(1.06);
+}
+
+.button.secondary {
+  background: #17232d;
+  color: #dceaf3;
+  border: 1px solid #344858;
+}
+
+.notice {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 18px;
+  border-radius: 9px;
+  padding: 14px 16px;
+  line-height: 1.45;
+}
+
+.notice.error {
+  border: 1px solid #6f3535;
+  background: #2d1717;
+  color: #ffdcdc;
+}
+
+.notice.success {
+  border: 1px solid #325b4c;
+  background: #13271f;
+  color: #dcfff1;
+}
+
+footer {
+  margin-top: 28px;
+  padding-top: 18px;
+  border-top: 1px solid #22313d;
+}
