@@ -263,9 +263,39 @@ Use:
 .\.venv\Scripts\python.exe .\tools\setup\generate_local_rsa_keypair.py --client-config-dir "D:\AssaultFirePH\TCLS\config"
 ```
 
-The known local PH setup loads `APClient.dat` as a raw PEM public key after a small client-side compatibility change. The historical notes confirm that compatibility change existed, but the currently published documentation does **not** contain a sufficiently verified address/signature for that separate two-byte loader patch.
+The known local PH setup loads `APClient.dat` as a raw PEM public key after a verified TCLS compatibility patch.
 
-Do not guess or publish an unverified patch location. If you recover it reproducibly, please contribute the exact build hash, RVA, expected bytes, replacement bytes, and evidence.
+Verified original/pre-patch TCLS SHA-256:
+
+```text
+13ead403452e0f25cf00658369bf4bf5ff34ed1b16027f7833fb27d398386cd1
+```
+
+Verified working patched SHA-256:
+
+```text
+3ff351e0adb594d7544e28db2e966a6d6eb548e9df70daaf4daf58f2ee438d56
+```
+
+Recovered edit sites:
+
+```text
+TCLS.dll + 0x000E07EA
+FF 52 28  ->  90 90 90
+
+TCLS.dll + 0x000E07F6
+B4        ->  B8
+```
+
+Use the repository helper rather than editing bytes manually:
+
+```powershell
+.\.venv\Scripts\python.exe .\tools\patches\patch_tcls_apclient_raw_pem.py "D:\AssaultFirePH\TCLS\Tenio\TCLS.dll" --apply
+```
+
+The helper accepts only the verified source hash, checks the original signatures, creates a backup, and requires the final hash to match the verified working DLL exactly.
+
+This is separate from the `+0x584E0` CREATE_SUSPENDED handoff patch.
 
 ## Windows / TenProtect compatibility note
 
