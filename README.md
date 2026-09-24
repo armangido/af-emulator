@@ -64,7 +64,35 @@ This creates the local server key and matching `APClient.dat`.
 
 **Never commit or upload `server\PRIVATE.PEM`.**
 
-### 3. Redirect the retired PH services to localhost
+### 3. Check TCLS raw-PEM compatibility
+
+Before launching, verify the exact `TCLS.dll` that your client uses:
+
+```powershell
+.\.venv\Scripts\python.exe .\tools\patches\diagnose_tcls_apclient.py --client-root "D:\YourAssaultFireFolder"
+```
+
+For the known PH build, the diagnostic will identify one of these states:
+
+```text
+13EAD403452E0F25CF00658369BF4BF5FF34ED1B16027F7833FB27D398386CD1
+  -> original/pre-patch TCLS; raw APClient.dat compatibility patch is required
+
+3FF351E0ADB594D7544E28DB2E966A6D6EB548E9DF70DAAF4DAF58F2EE438D56
+  -> verified patched TCLS; no APClient loader patch is needed
+```
+
+If the original `13EAD403...` build is detected, fully close `client.exe` / TCLS and run:
+
+```powershell
+.\.venv\Scripts\python.exe .\tools\patches\patch_tcls_apclient_raw_pem.py "D:\YourAssaultFireFolder\TCLS\Tenio\TCLS.dll" --apply
+```
+
+The helper verifies the exact source hash and instruction bytes, creates `TCLS.dll.bak`, applies only the recovered compatibility edits, and requires the final DLL hash to match the verified working build. **Do not force this patch onto an unknown TCLS hash.**
+
+This step is important when the launcher shows **`AP client initialization failed.`** even though `PRIVATE.PEM` and `APClient.dat` already match.
+
+### 4. Redirect the retired PH services to localhost
 
 Run from **Administrator PowerShell**:
 
@@ -72,7 +100,7 @@ Run from **Administrator PowerShell**:
 powershell -ExecutionPolicy Bypass -File .\tools\setup\setup_assaultfire_hosts.ps1
 ```
 
-### 4. Start the emulator
+### 5. Start the emulator
 
 ```powershell
 .\.venv\Scripts\python.exe .\server\assaultfire_server_v143b.py
@@ -87,7 +115,7 @@ $env:AF_DS_SPAWNER_ENABLED = "1"
 
 The repository does **not** provide `TGame_AFDEV.exe`, maps, packages, or other original game files.
 
-### 5. Launch the PH client
+### 6. Launch the PH client
 
 For the validated PH build, use **one** compatibility path:
 
@@ -147,7 +175,7 @@ See **[The Altar Runtime](docs/ALTAR_RUNTIME.md)** for implementation details.
 
 Start with the symptom instead of changing random files:
 
-- **`AP client initialization failed.`** → run `tools/patches/diagnose_tcls_apclient.py`. If it detects the verified original `13EAD403...` TCLS build, use `tools/patches/patch_tcls_apclient_raw_pem.py`; see [Launcher / AP / TGame errors](docs/LAUNCHER_ERRORS.md) and [Issue #7](https://github.com/armangido/af-emulator/issues/7).
+- **`AP client initialization failed.`** → repeat Quick start step 3 and confirm the loaded TCLS hash; see [Launcher / AP / TGame errors](docs/LAUNCHER_ERRORS.md) and [Issue #7](https://github.com/armangido/af-emulator/issues/7).
 - **TCLS launches but TGame does not hand off correctly** → [Vital Launch Requirements](docs/LAUNCH_REQUIREMENTS.md)
 - **TGame crashes around datetime/startup** → use one of the compatibility helpers above
 - **legacy security-driver / modern Windows startup problems** → [Vital Setup Notes](docs/VITAL_SETUP_NOTES.md) and [Issue #4](https://github.com/armangido/af-emulator/issues/4)
