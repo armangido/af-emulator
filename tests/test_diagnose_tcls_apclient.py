@@ -14,8 +14,8 @@ spec.loader.exec_module(mod)
 
 
 def test_known_tcls_hashes_are_classified():
-    assert mod.classify_tcls_hash(mod.VALIDATED_TCLS_SHA256) == "validated-rsa-dh"
-    assert mod.classify_tcls_hash(mod.ISSUE7_TACC_TCLS_SHA256.upper()) == "issue7-alternate-tacc"
+    assert mod.classify_tcls_hash(mod.VALIDATED_TCLS_SHA256) == "validated-raw-pem-patched"
+    assert mod.classify_tcls_hash(mod.ORIGINAL_TCLS_SHA256.upper()) == "original-needs-raw-pem-patch"
     assert mod.classify_tcls_hash("00" * 32) == "unknown"
 
 
