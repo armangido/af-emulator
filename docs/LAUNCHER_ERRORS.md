@@ -110,39 +110,72 @@ It checks, without modifying any client file:
 - whether `APClient.dat` has the known 272-byte RSA-1024 SPKI PEM form;
 - whether the TCLS hash is the validated RSA/DH build, the known Issue #7 alternate build, or an unknown build.
 
-#### Known Issue #7 alternate TCLS build
+#### Verified Issue #7 raw-PEM TCLS fix
 
-The following TCLS SHA-256 is a known alternate build:
+We recovered the exact difference between the original Issue #7 DLL and the working TCLS used by the preservation setup.
+
+Original/pre-patch SHA-256:
 
 ~~~text
 13EAD403452E0F25CF00658369BF4BF5FF34ED1B16027F7833FB27D398386CD1
 ~~~
 
-This exact build has been observed taking a different authentication path, including a 58-byte `0x8283` TACC packet, instead of the validated 214-byte RSA/DH handshake.
+Verified working patched SHA-256:
 
-If the diagnostic reports that `PRIVATE.PEM` and `APClient.dat` match, **do not keep regenerating the RSA pair**. A matching key pair does not make this alternate TCLS build use the emulator's validated RSA/DH path.
+~~~text
+3FF351E0ADB594D7544E28DB2E966A6D6EB548E9DF70DAAF4DAF58F2EE438D56
+~~~
 
-The supported resolution today is to use the validated PH TCLS/client combination from your own lawful installation or backup. Native support for this alternate build requires its TACC AUTH state machine to be implemented as a separate compatibility path.
+The DLLs are the same size and differ at exactly two edit sites / four bytes:
 
-Do not copy offsets or patch bytes from another TCLS build. The historical raw-PEM loader change was build-specific, and its exact bytes have not been re-verified for this Issue #7 DLL.
+~~~text
+RVA/file offset 0x000E07EA
+FF 52 28  ->  90 90 90
 
-See [Issue #7](https://github.com/armangido/af-emulator/issues/7) for the captured protocol evidence.
+RVA/file offset 0x000E07F6
+B4        ->  B8
+~~~
 
-#### Important: raw-PEM TCLS compatibility
+These edits are inside `CAPAccount::LoadPublicKey`. The second edit changes the final copy source from `[ebp-0x44C]` to `[ebp-0x448]`, selecting the raw `APClient.dat` buffer. The first edit skips the adjacent virtual call used by the original loader path.
 
-The project's generated `APClient.dat` is a raw PEM RSA-1024 SubjectPublicKeyInfo public key.
+The repository now includes a hash/signature-aware patcher:
 
-The known PH TCLS setup used during preservation research required a **separate small two-byte TCLS loader compatibility change** to accept that raw PEM file. The exact APClient-loader RVA/original/replacement bytes are **not currently re-verified well enough to publish**.
+~~~powershell
+.\.venv\Scripts\python.exe .\tools\patches\patch_tcls_apclient_raw_pem.py "D:\AssaultFirePH\TCLS\Tenio\TCLS.dll"
+~~~
 
-Do **not** confuse that missing loader compatibility change with:
+Without `--apply`, it only checks the DLL.
+
+To apply the verified compatibility patch, fully close `client.exe` / TCLS and run:
+
+~~~powershell
+.\.venv\Scripts\python.exe .\tools\patches\patch_tcls_apclient_raw_pem.py "D:\AssaultFirePH\TCLS\Tenio\TCLS.dll" --apply
+~~~
+
+The helper:
+
+- accepts only the exact original `13EAD403...` source hash;
+- verifies the original instruction bytes;
+- creates `TCLS.dll.bak`;
+- applies only the recovered edit sites;
+- verifies that the final DLL hash is exactly `3FF351E0...`;
+- refuses to modify unknown builds.
+
+If the diagnostic reports that `PRIVATE.PEM` and `APClient.dat` already match, **do not regenerate the key pair again**. Patch/check TCLS instead.
+
+This also explains the Issue #7 behavior: the unpatched DLL was observed taking the alternate 58-byte `0x8283` TACC path, while the verified patched DLL is the build used by the working 214-byte RSA/DH setup.
+
+Do **not** confuse this APClient loader patch with:
 
 ~~~text
 TCLS.dll + 0x584E0
 ~~~
 
-That address is the unrelated **CREATE_SUSPENDED TGame handoff patch** and will not fix AP client initialization.
+That is the separate runtime-only **CREATE_SUSPENDED TGame handoff patch** and does not fix AP client initialization.
 
-If you already have a locally patched TCLS setup that previously accepted the raw PEM `APClient.dat`, verify that the launcher is actually loading that same TCLS copy. Do not distribute a modified `TCLS.dll`.
+Do not distribute either original or patched `TCLS.dll`; distribute the clean-room patch helper and signatures instead.
+
+See [Issue #7](https://github.com/armangido/af-emulator/issues/7) for the captured protocol evidence.
 
 #### If AUTH connects but RSA then fails
 
