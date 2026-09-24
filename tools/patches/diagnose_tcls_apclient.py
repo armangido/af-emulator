@@ -4,7 +4,8 @@ Assault Fire PH - TCLS/APClient compatibility diagnostic.
 
 Read-only helper: hashes TCLS.dll and verifies that server/PRIVATE.PEM and
 TCLS/config/APClient.dat contain the same RSA public key. It also identifies
-the validated RSA/DH TCLS build and the known alternate Issue #7 TACC build.
+the verified original/pre-patch TCLS build and the exact raw-PEM-compatible
+patched form used by the working preservation setup.
 """
 from __future__ import annotations
 
@@ -17,7 +18,7 @@ from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 
 VALIDATED_TCLS_SHA256 = "3ff351e0adb594d7544e28db2e966a6d6eb548e9df70daaf4daf58f2ee438d56"
-ISSUE7_TACC_TCLS_SHA256 = "13ead403452e0f25cf00658369bf4bf5ff34ed1b16027f7833fb27d398386cd1"
+ORIGINAL_TCLS_SHA256 = "13ead403452e0f25cf00658369bf4bf5ff34ed1b16027f7833fb27d398386cd1"
 ISSUE7_URL = "https://github.com/armangido/af-emulator/issues/7"
 
 
@@ -41,9 +42,9 @@ def sha256_file(path: Path) -> str:
 def classify_tcls_hash(sha256_hex: str) -> str:
     value = sha256_hex.lower()
     if value == VALIDATED_TCLS_SHA256:
-        return "validated-rsa-dh"
-    if value == ISSUE7_TACC_TCLS_SHA256:
-        return "issue7-alternate-tacc"
+        return "validated-raw-pem-patched"
+    if value == ORIGINAL_TCLS_SHA256:
+        return "original-needs-raw-pem-patch"
     return "unknown"
 
 
@@ -105,13 +106,14 @@ def print_tcls_result(tcls_path: Path, tcls_sha: str) -> str:
     print("[TCLS]")
     print(f"  path   : {tcls_path}")
     print(f"  SHA256 : {tcls_sha.upper()}")
-    if classification == "validated-rsa-dh":
-        print("  class  : validated PH RSA/DH AUTH build")
-        print("  note   : documented for the emulator's 214-byte RSA/DH AUTH path")
-    elif classification == "issue7-alternate-tacc":
-        print("  class  : known alternate TCLS build from Issue #7")
-        print("  note   : observed using a different TACC AUTH path, including a")
-        print("           58-byte 0x8283 packet instead of the 214-byte RSA/DH handshake")
+    if classification == "validated-raw-pem-patched":
+        print("  class  : validated raw-PEM-compatible PH TCLS build")
+        print("  note   : exact patched form used by the working RSA/DH setup")
+    elif classification == "original-needs-raw-pem-patch":
+        print("  class  : verified original/pre-patch TCLS build from Issue #7")
+        print("  note   : differs from the validated build only at the recovered")
+        print("           raw-PEM loader compatibility edit sites")
+        print("  fix    : tools/patches/patch_tcls_apclient_raw_pem.py")
         print(f"  issue  : {ISSUE7_URL}")
     else:
         print("  class  : unknown/unvalidated TCLS build")
@@ -140,19 +142,16 @@ def print_diagnosis(classification: str, check: KeyCheck) -> None:
         print("  PRIVATE.PEM and APClient.dat do not represent the same RSA public key.")
         print("  Fix the key pair before debugging the AUTH protocol.")
         return
-    if classification == "issue7-alternate-tacc":
-        print("  The RSA pair matches. Regenerating the keys is not the fix for this build.")
-        print("  This exact TCLS hash is the known Issue #7 alternate-auth build.")
-        print("  The emulator currently validates the RSA/DH path, not this TACC path.")
-        print("  Use the validated PH TCLS/client combination from your own lawful")
-        print("  installation/backup, or implement this build's TACC AUTH separately.")
-        print("  No raw-PEM loader patch is applied here because its exact bytes have")
-        print("  not been re-verified for this DLL.")
+    if classification == "original-needs-raw-pem-patch":
+        print("  The RSA pair matches. Regenerating the keys is not the fix.")
+        print("  This is the verified original/pre-patch TCLS build.")
+        print("  Close client.exe/TCLS and apply the recovered raw-PEM compatibility patch:")
+        print("    python tools/patches/patch_tcls_apclient_raw_pem.py <TCLS.dll> --apply")
         return
-    if classification == "validated-rsa-dh":
-        print("  TCLS is the documented RSA/DH build and the RSA pair matches.")
-        print("  If VERSION works but AUTH never connects, inspect local APClient/TCLS")
-        print("  initialization and verify the launcher loaded this exact DLL copy.")
+    if classification == "validated-raw-pem-patched":
+        print("  TCLS is the verified raw-PEM-compatible build and the RSA pair matches.")
+        print("  If VERSION works but AUTH never connects, verify the launcher loaded")
+        print("  this exact DLL copy and then inspect the local AP/TCLS initialization.")
         return
     print("  The RSA pair matches, but this TCLS hash is unvalidated.")
     print("  Capture the network sequence and loaded TCLS path before patching anything.")
@@ -161,7 +160,7 @@ def print_diagnosis(classification: str, check: KeyCheck) -> None:
 def parse_args():
     repo_root = Path(__file__).resolve().parents[2]
     ap = argparse.ArgumentParser(description="Read-only TCLS/APClient compatibility diagnostic")
-    ap.add_argument("--client-root", type=Path, help=r'Assault Fire root, e.g. "D:\AssaultFirePH"')
+    ap.add_argument("--client-root", type=Path, help=r'Assault Fire root, e.g. "D:\\AssaultFirePH"')
     ap.add_argument("--tcls", type=Path, help="explicit path to TCLS.dll")
     ap.add_argument("--apclient", type=Path, help="explicit path to APClient.dat")
     ap.add_argument(
