@@ -1,4 +1,4 @@
-# Assault Fire Server Emulator
+# Assault Fire Emulator
 
 [![Python](https://img.shields.io/badge/Python-3.12+-blue)](https://www.python.org/)
 [![Engine](https://img.shields.io/badge/Engine-Unreal%20Engine%203-lightgrey)](#)
@@ -17,12 +17,11 @@ The current public baseline is **v143b**.
 
 - VERSION / AUTH / DIR / ROLE / ZONE local backend flow
 - existing/local profile login path
-- dynamic PvE room and dedicated-server lifecycle with stock-client map selection
+- dynamic room and dedicated-server lifecycle used by The Altar
 - lazy AFDEV startup instead of spawning a server when a lobby is merely created
 - v48 AFDEV loader + v9 multi-peer UDP bridge
 - zero-DSKey readiness gate before the UE3 session is released
-- stock-selected PvE maps propagated into the lazy AFDEV launch
-- room difficulty/settings propagation (validated on The Altar):
+- The Altar / Maya difficulty selection:
   - Easy — `0x00001001`
   - Normal — `0x00001002`
   - Hard — `0x00001003`
@@ -79,7 +78,7 @@ powershell -ExecutionPolicy Bypass -File .\tools\setup\setup_assaultfire_hosts.p
 .\.venv\Scripts\python.exe .\server\assaultfire_server_v143b.py
 ```
 
-For **PvE maps**, also point the DS spawner at your local AFDEV game directory before starting the server:
+For **The Altar / PvE**, also point the DS spawner at your local AFDEV game directory before starting the server:
 
 ```powershell
 $env:AF_GAME_DIR = "D:\YourAssaultFireFolder\Binaries\Win32"
@@ -112,9 +111,9 @@ The suspended-launch helper already applies the datetime compatibility patch, so
 
 For the full walkthrough, use **[Getting Started](docs/GETTING_STARTED.md)**.
 
-## PvE maps
+## The Altar
 
-The stable PvE dedicated-server path is integrated on `main`. Stock-room `MapString` and A11E settings are carried into the lazy AFDEV spawn, so compatible installed PvE maps are no longer forced to a single hard-coded map. The Altar remains a validated reference case.
+The stable Altar path is integrated on `main`.
 
 ```text
 Create room
@@ -142,15 +141,13 @@ Room settings sent through A11E are applied before the lazy AFDEV spawn, so the 
 
 A PH-client HUD label can still display the wrong text in some cases; that is tracked separately from the authoritative server/AFDEV difficulty state.
 
-If you need the old fixed-map behavior, set `AF_DS_USE_CLIENT_MAP=0` and optionally override `AF_DS_DEFAULT_MAP`.
-
-See **[PvE Runtime and Map Selection](docs/ALTAR_RUNTIME.md)** for implementation details.
+See **[The Altar Runtime](docs/ALTAR_RUNTIME.md)** for implementation details.
 
 ## If something fails
 
 Start with the symptom instead of changing random files:
 
-- **`AP client initialization failed.`** → run `tools/patches/diagnose_tcls_apclient.py` first, then see [Launcher / AP / TGame errors](docs/LAUNCHER_ERRORS.md) and [Issue #7](https://github.com/armangido/af-emulator/issues/7) for the known alternate TCLS build.
+- **`AP client initialization failed.`** → run `tools/patches/diagnose_tcls_apclient.py`. If it detects the verified original `13EAD403...` TCLS build, use `tools/patches/patch_tcls_apclient_raw_pem.py`; see [Launcher / AP / TGame errors](docs/LAUNCHER_ERRORS.md) and [Issue #7](https://github.com/armangido/af-emulator/issues/7).
 - **TCLS launches but TGame does not hand off correctly** → [Vital Launch Requirements](docs/LAUNCH_REQUIREMENTS.md)
 - **TGame crashes around datetime/startup** → use one of the compatibility helpers above
 - **legacy security-driver / modern Windows startup problems** → [Vital Setup Notes](docs/VITAL_SETUP_NOTES.md) and [Issue #4](https://github.com/armangido/af-emulator/issues/4)
@@ -166,11 +163,10 @@ You do not need to read everything before trying the project.
 | --- | --- |
 | [Getting Started](docs/GETTING_STARTED.md) | first setup and local launch |
 | [Project Status](docs/STATUS.md) | what works, what is partial, what is still planned |
-| [PvE Runtime and Map Selection](docs/ALTAR_RUNTIME.md) | current v143b / v48 / v9 PvE path and stock-selected maps |
+| [The Altar Runtime](docs/ALTAR_RUNTIME.md) | current v143b / v48 / v9 PvE path |
 | [Launch Requirements](docs/LAUNCH_REQUIREMENTS.md) | TCLS → TGame handoff and compatibility |
 | [Launcher Errors](docs/LAUNCHER_ERRORS.md) | known launcher/AP/TGame messages |
 | [Architecture](docs/ARCHITECTURE.md) | ports, components, and data flow |
-| [Research Findings](docs/RESEARCH_FINDINGS.md) | verified reverse-engineering findings and clearly marked research leads |
 | [FAQ](docs/FAQ.md) | common questions |
 | [Contributing](CONTRIBUTING.md) | submitting fixes, tests, and research |
 
@@ -184,7 +180,7 @@ tests/       reproducible regression tests
 .github/     issue and contribution templates
 ```
 
-Legacy files such as the older v94 server, v26 loader, and v5 bridge are kept for rollback/history. They are **not** the recommended PvE path.
+Legacy files such as the older v94 server, v26 loader, and v5 bridge are kept for rollback/history. They are **not** the recommended Altar path.
 
 ## Project scope
 
