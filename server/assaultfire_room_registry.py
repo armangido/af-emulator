@@ -274,8 +274,13 @@ class RoomRegistry:
             if room is None or uin not in room["members"]:
                 raise RoomRegistryError("not-in-room")
             member = room["members"][uin]
-            allowed = set(self._seat_ranges(room, observer=bool(member.get("observer"))))
-            if new_seat not in allowed:
+            if member.get("observer"):
+                allowed = set(self._seat_ranges(room, observer=True))
+                if new_seat not in allowed:
+                    raise RoomRegistryError(f"seat-out-of-range:{new_seat}")
+            elif new_seat < 0 or new_seat >= 32:
+                # r20: stock PH fighter seats use sparse 32-entry IDs.
+                # FighterCapacity limits population, not numeric seat-id range.
                 raise RoomRegistryError(f"seat-out-of-range:{new_seat}")
             for other_uin, other in room["members"].items():
                 if int(other_uin) != uin and int(other["seat_index"]) == new_seat:

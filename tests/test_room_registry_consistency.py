@@ -248,5 +248,56 @@ class ServerStaticSafetyTests(unittest.TestCase):
             self.assertIn("V150_ROOM_REGISTRY.require_owner", block)
 
 
+class VerifiedLobbyPromotionTests(unittest.TestCase):
+    def test_sparse_with32_seat_move_is_accepted(self):
+        registry = RoomRegistry()
+        room = registry.create_room(
+            {
+                "room_id": 77,
+                "display_id": 77,
+                "name": "with32",
+                "fighter_capacity": 4,
+                "observer_capacity": 0,
+                "password": "",
+                "match_settings_wire": b"",
+                "mode_id": 0x2001,
+                "map_id": 0x2F,
+                "sub_mode_id": 0x1001,
+                "flags": 0x3008,
+            },
+            owner_uin=10001,
+            owner_name="LocalPlayer",
+        )
+        self.assertEqual(room["members"][0]["seat_index"], 0)
+        moved, member, old = registry.move_member(10001, 16, 0)
+        self.assertEqual(old, 0)
+        self.assertEqual(member["seat_index"], 16)
+        self.assertEqual(moved["members"][0]["seat_index"], 16)
+
+    def test_promoted_lobby_protocol_markers_are_present(self):
+        server = (ROOT / "server" / "assaultfire_server_v143b.py").read_text(
+            encoding="utf-8", errors="replace"
+        )
+        self.assertIn("TGAME_ZN_REQ_ENTERMATCHROOM = 0xA103", server)
+        self.assertIn('bytes.fromhex("0000000000000001000000010000")', server)
+        self.assertIn("R14_A102_ENTERABILITY_FLAG = 0x00004000", server)
+        self.assertIn("R17_A102_PAGEFLAGS_SINGLE", server)
+        self.assertIn("_r20_map_pve_camp_seat(0, 0, 4) == 16", server)
+        self.assertIn("_r20_map_pve_camp_seat(16, 1, 4) == 0", server)
+        self.assertIn("_r12_uid_for_client_pid", server)
+        self.assertIn("_r13_wire_gid", server)
+
+    def test_pre_a10f_seat_refresh_order_is_locked(self):
+        server = (ROOT / "server" / "assaultfire_server_v143b.py").read_text(
+            encoding="utf-8", errors="replace"
+        )
+        start = server.index('elif app["cmd"] == TGAME_ZN_REQ_CHANGEMATCHROOMCAMP:')
+        end = server.index('elif app["cmd"] == TGAME_ZN_REQ_SETMATCHROOMREADY:', start)
+        block = server[start:end]
+        refresh = block.index("ZN2C_NTF_ENTERMATCHROOM r20-pre-A10F")
+        change = block.index("ZN2C_NTF_CHANGEMATCHROOMCAMP r20-shared")
+        self.assertLess(refresh, change)
+
+
 if __name__ == "__main__":
     unittest.main()

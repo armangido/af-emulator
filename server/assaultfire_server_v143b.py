@@ -878,7 +878,48 @@ def parse_tdr_header(data):
 #   byte ticket[ticket_size]
 # ---------------------------------------------------------------------------
 
-def build_ap_result_plaintext(seqno):
+# ---------------------------------------------------------------------------
+# r12 LOCAL MULTI-CLIENT TEST IDENTITY
+# ---------------------------------------------------------------------------
+
+_R12_UID_LOCK = threading.Lock()
+_R12_UID_BY_CLIENT_PID = {}
+_R12_NEXT_UID = 10001
+
+
+def _r12_uid_for_client_pid(pid):
+    global _R12_NEXT_UID
+    pid_key = int(pid) if pid is not None else None
+    with _R12_UID_LOCK:
+        if pid_key is not None and pid_key in _R12_UID_BY_CLIENT_PID:
+            return int(_R12_UID_BY_CLIENT_PID[pid_key])
+        uid = int(_R12_NEXT_UID)
+        _R12_NEXT_UID += 1
+        if pid_key is not None:
+            _R12_UID_BY_CLIENT_PID[pid_key] = uid
+        return uid
+
+
+def _r12_parse_ap_login_name(body):
+    """Best-effort display-only decode of the first AP_CMD_VERIFY TDR string."""
+    try:
+        body = bytes(body or b"")
+        if len(body) < 7:
+            return None
+        off = 2
+        n = struct.unpack_from(">I", body, off)[0]
+        off += 4
+        if n < 1 or n > 129 or off + n > len(body):
+            return None
+        raw = body[off:off + n]
+        if raw[-1:] != b"\x00":
+            return None
+        return raw[:-1].decode("latin1", "replace")
+    except Exception:
+        return None
+
+
+def build_ap_result_plaintext(seqno, uid=10001):
     error_code = 0
     oas_error_code = 0
 
@@ -886,8 +927,8 @@ def build_ap_result_plaintext(seqno):
     # last byte to be NUL.
     error_message = b"\x00"
 
-    # Give the client usable non-zero values.
-    uid = 10001
+    # r12: caller supplies the process-local identity.
+    uid = int(uid) & 0xFFFFFFFF
     timestamp = int(time.time()) & 0xFFFFFFFF
 
     # Opaque ticket. Later, when the client presents this
@@ -1379,9 +1420,29 @@ def handle_auth(conn, addr):
         # 4. Send AP_CMD_RESULT / cmd 4 success
         # ---------------------------------------------------------------
 
+        try:
+            _auth_server_port = conn.getsockname()[1]
+            _auth_pid, _auth_process_name = identify_peer_process(
+                addr, _auth_server_port
+            )
+        except Exception as _auth_peer_e:
+            _auth_pid, _auth_process_name = None, None
+            log("AUTH", f"r12 peer identity lookup failed: {_auth_peer_e}")
+
+        auth_uid = _r12_uid_for_client_pid(_auth_pid)
+        auth_login_name = _r12_parse_ap_login_name(hdr.get("body"))
+        log(
+            "AUTH",
+            "r12 local-multiclient identity: "
+            f"login={auth_login_name!r} "
+            f"OWNER={_auth_process_name or '<unresolved>'} "
+            f"PID={_auth_pid} -> uin={auth_uid}"
+        )
+
         result_plain = (
             build_ap_result_plaintext(
-                hdr["seqno"]
+                hdr["seqno"],
+                uid=auth_uid,
             )
         )
 
@@ -2728,8 +2789,8 @@ TGAME_ZN_REQ_MATCHROOMLIST = 0xA100
 TGAME_ZN_RES_MATCHROOMLIST = 0xA102
 TGAME_ZN_REQ_CREATEMATCHROOM = 0xA10A
 TGAME_ZN_RES_CREATEMATCHROOM = 0xA10B
-# r11: stock OnlineRequest_EnterRoomByRoomId; prior v99 recovery + registry restore.
-TGAME_ZN_REQ_ENTERMATCHROOM = 0xA104
+# r15: live stock PH OnlineRequest_EnterRoomByRoomId request observed as A103.
+TGAME_ZN_REQ_ENTERMATCHROOM = 0xA103
 TGAME_ZN_RES_ENTERMATCHROOM = 0xA105
 TGAME_ZN_NTF_ENTERMATCHROOM = 0xA106
 
@@ -3210,6 +3271,69 @@ V129_SOFIA_HAND_GID = ((V109_UIN & 0xffffffff) << 32) | 8
 V129_SOFIA_UPPER_GID = ((V109_UIN & 0xffffffff) << 32) | 9
 V129_SOFIA_HAIR_GID = ((V109_UIN & 0xffffffff) << 32) | 10
 R20_STRENGTH_GID = ((V109_UIN & 0xffffffff) << 32) | 11
+
+
+# ---------------------------------------------------------------------------
+# r13 identity-safe local multi-client wire projection
+# ---------------------------------------------------------------------------
+
+def _r13_wire_gid(gid, session_uin):
+    gid = int(gid) & 0xFFFFFFFFFFFFFFFF
+    session_uin = int(session_uin) & 0xFFFFFFFF
+    hi = (gid >> 32) & 0xFFFFFFFF
+    lo = gid & 0xFFFFFFFF
+    if hi != (V109_UIN & 0xFFFFFFFF):
+        return gid
+    return (session_uin << 32) | lo
+
+
+def _r13_canonical_gid(gid, session_uin):
+    gid = int(gid) & 0xFFFFFFFFFFFFFFFF
+    session_uin = int(session_uin) & 0xFFFFFFFF
+    hi = (gid >> 32) & 0xFFFFFFFF
+    lo = gid & 0xFFFFFFFF
+    if hi != session_uin:
+        return gid
+    return ((V109_UIN & 0xFFFFFFFF) << 32) | lo
+
+
+def _r13_project_prop(prop, session_uin):
+    q = dict(prop)
+    q["gid"] = _r13_wire_gid(q.get("gid", 0), session_uin)
+    q["owner_gid"] = _r13_wire_gid(q.get("owner_gid", 0), session_uin)
+    return q
+
+
+def _r13_project_operation(op, session_uin):
+    q = dict(op)
+    q["subject_gid"] = _r13_wire_gid(q.get("subject_gid", 0), session_uin)
+    q["target_gid"] = _r13_wire_gid(q.get("target_gid", 0), session_uin)
+    return q
+
+
+def _r13_canonicalize_operation(op, session_uin):
+    q = dict(op)
+    q["subject_gid"] = _r13_canonical_gid(q.get("subject_gid", 0), session_uin)
+    q["target_gid"] = _r13_canonical_gid(q.get("target_gid", 0), session_uin)
+    return q
+
+
+def _r13_wire_current_role_gid(session_uin):
+    return _r13_wire_gid(_v140_current_role_gid(), session_uin)
+
+
+def _r13_identity_projection_selftest():
+    b_uin = 10002
+    canonical_role = ((V109_UIN & 0xFFFFFFFF) << 32) | 1
+    b_role = (b_uin << 32) | 1
+    assert _r13_wire_gid(canonical_role, b_uin) == b_role
+    assert _r13_canonical_gid(b_role, b_uin) == canonical_role
+    assert _r13_wire_gid(1, b_uin) == 1
+    assert _r13_canonical_gid(1, b_uin) == 1
+    return True
+
+
+_R13_IDENTITY_PROJECTION_SELFTEST = _r13_identity_projection_selftest()
 
 V109_LOC_PRIMARY = 0x00
 V127_LOC_PISTOL = 0x01
@@ -3915,7 +4039,8 @@ for _cmd in (
 
 
 
-def _v111_pack_inventory_prop(p):
+def _v111_pack_inventory_prop(p, session_uin=V109_UIN):
+    p = _r13_project_prop(p, session_uin)
     return _v109_pack_prop_info(
         int(p["gid"]),
         int(p["item_id"]),
@@ -3923,15 +4048,16 @@ def _v111_pack_inventory_prop(p):
         location=int(p.get("location", V109_LOC_BAG)),
         durability=int(p.get("durability", 100)),
         durability_max=int(p.get("durability_max", 100)),
+        uin=int(session_uin),
     )
 
 
-def _v127_build_playerprops_chunk(rows, is_last):
+def _v127_build_playerprops_chunk(rows, is_last, session_uin=V109_UIN):
     """Build one legal A006 chunk (proto_c2zn declares PropInfo[5])."""
     rows = list(rows)
     if len(rows) > 5:
         raise ValueError(f"A006 chunk exceeds PropInfo[5]: {len(rows)}")
-    props = [_v111_pack_inventory_prop(p) for p in rows]
+    props = [_v111_pack_inventory_prop(p, session_uin) for p in rows]
     body = (
         _v48_u16(ZONE_ERR_SUCC)
         + _v48_u8(1 if is_last else 0)
@@ -4064,7 +4190,7 @@ def _v140_price(commodity_id, price_index):
     return str(currency), int(prices[idx])
 
 
-def _v140_plan_purchase(req):
+def _v140_plan_purchase(req, self_uin=V109_UIN):
     if int(req.get("count", 0)) <= 0 or not req.get("commodities"):
         raise _v140_ShopReject(SHOP_ERR_SHOPCART_EMPTY, "empty cart")
 
@@ -4074,8 +4200,9 @@ def _v140_plan_purchase(req):
             f"only normal self-buy is implemented; buy_type={req.get('buy_type')}",
         )
 
-    consignne = int(req.get("consignne") or V109_UIN)
-    if consignne not in (0, V109_UIN):
+    self_uin = int(self_uin) & 0xFFFFFFFF
+    consignne = int(req.get("consignne") or self_uin)
+    if consignne not in (0, self_uin):
         raise _v140_ShopReject(
             SHOP_ERR_FAIL,
             f"gift/other-user purchase not enabled; consignne={consignne}",
@@ -4161,6 +4288,7 @@ def _v140_build_buy_response(
     consume_tp=0,
     consume_gp=0,
     consume_mp=0,
+    self_uin=V109_UIN,
 ):
     # ZN2C_ResBuyCommodity:
     # Result, BuyType, PayType, NickName, ConsumeTP, TPBalance,
@@ -4171,7 +4299,7 @@ def _v140_build_buy_response(
         prop_rows = []
         for prop in row.get("props", []):
             prop_rows.append(
-                _v48_u64(prop["gid"])
+                _v48_u64(_r13_wire_gid(prop["gid"], self_uin))
                 + _v48_u32(prop["item_id"])
                 + _v48_u32(prop.get("avail_hours", V140_ITEM_AVAIL_HOURS))
             )
@@ -4194,7 +4322,7 @@ def _v140_build_buy_response(
         + _v48_u32(int(consume_mp))
         + _v48_u16(len(parts))
         + b"".join(parts)
-        + _v48_u64(int(req.get("consignne") or V109_UIN))
+        + _v48_u64(int(req.get("consignne") or self_uin))
     )
 
     return _v62_build_server_app(
@@ -4242,7 +4370,9 @@ def _v140_send_wallet_sync(conn, key, label, reason=UPDATE_REASON_BUY, prefix="m
         )
 
 
-def _v140_send_full_inventory(conn, key, label, prefix="mall"):
+def _v140_send_full_inventory(
+    conn, key, label, prefix="mall", session_uin=V109_UIN
+):
     rows = list(V111_INVENTORY)
     chunks = [rows[i:i+5] for i in range(0, len(rows), 5)] or [[]]
 
@@ -4250,6 +4380,7 @@ def _v140_send_full_inventory(conn, key, label, prefix="mall"):
         pkt = _v127_build_playerprops_chunk(
             chunk,
             i == len(chunks) - 1,
+            session_uin=session_uin,
         )
         _v48_send_app(
             conn, key, pkt, label,
@@ -5117,9 +5248,9 @@ def _v150_build_ntf_enter_match_room(member):
 
 
 def _v150_parse_enter_match_room(body):
-    """Tolerant A104 decoder: required u64 RoomId, optional TDR password/tail."""
+    """Tolerant live A103 decoder: required u64 RoomId, optional TDR password/tail."""
     if len(body) < 8:
-        raise ValueError(f"A104 too short: {len(body)}B")
+        raise ValueError(f"A103 too short: {len(body)}B")
     room_id = struct.unpack_from(">Q", body, 0)[0]
     off = 8
     password = ""
@@ -5140,6 +5271,67 @@ def _v150_parse_enter_match_room(body):
     }
 
 
+def _r15_a103_enter_request_selftest():
+    live_body = bytes.fromhex("0000000000000001000000010000")
+    parsed = _v150_parse_enter_match_room(live_body)
+    if parsed != {
+        "room_id": 1,
+        "password": "",
+        "observer": False,
+        "tail": b"",
+    }:
+        raise AssertionError(f"r15 A103 parser mismatch: {parsed!r}")
+    if TGAME_ZN_REQ_ENTERMATCHROOM != 0xA103:
+        raise AssertionError(
+            f"r15 EnterRoomByRoomId command drifted: 0x{TGAME_ZN_REQ_ENTERMATCHROOM:04X}"
+        )
+    return True
+
+
+R14_A102_ENTERABILITY_FLAG = 0x00004000
+
+
+def _r14_a102_match_settings_wire(room):
+    original_wire = bytes(room["match_settings_wire"])
+    if len(original_wire) < 18:
+        raise ValueError(
+            f"r14 A102 MatchSettings too short: {len(original_wire)}B"
+        )
+    map_string_len = struct.unpack_from(">I", original_wire, 6)[0]
+    flags_off = 14 + int(map_string_len)
+    if map_string_len < 1 or flags_off + 4 > len(original_wire):
+        raise ValueError("r14 A102 invalid MatchSettings MapString/flags layout")
+    wire_flags = struct.unpack_from(">I", original_wire, flags_off)[0]
+    canonical_flags = int(room.get("flags", wire_flags)) & 0xFFFFFFFF
+    if wire_flags != canonical_flags:
+        raise ValueError("r14 A102 preserved flags differ from canonical room flags")
+    projected = bytearray(original_wire)
+    struct.pack_into(
+        ">I", projected, flags_off,
+        wire_flags | R14_A102_ENTERABILITY_FLAG,
+    )
+    return bytes(projected)
+
+
+def _r14_a102_projection_selftest():
+    raw = (
+        struct.pack(">IH", 0x00002001, 0x002F)
+        + struct.pack(">I", 1)
+        + b"\x00"
+        + struct.pack(">II", 0x00001001, 0x00003008)
+    )
+    room = {"match_settings_wire": raw, "flags": 0x00003008}
+    projected = _r14_a102_match_settings_wire(room)
+    return (
+        raw != projected
+        and struct.unpack_from(">I", projected, 15)[0] == 0x00007008
+        and room["match_settings_wire"] == raw
+    )
+
+
+_R14_A102_PROJECTION_SELFTEST = _r14_a102_projection_selftest()
+
+
 def _v150_pack_basic_match_room_info(room):
     return (
         _v48_u64(room["room_id"])
@@ -5147,7 +5339,7 @@ def _v150_pack_basic_match_room_info(room):
         + _v48_u64(room.get("qqtalk_room_id", 0))
         + _v50_geo_tdr_string(room["name"], 64)
         + _v50_geo_tdr_string(room.get("owner_name", "LocalPlayer"), 32)
-        + room["match_settings_wire"]
+        + _r14_a102_match_settings_wire(room)
         + _v48_u8(room["fighter_capacity"])
         + _v48_u8(room["observer_capacity"])
         + _v48_u8(room.get("fighter_count", 0))
@@ -5173,11 +5365,19 @@ def _v150_filter_match_rooms(req, rooms):
     return total, filtered[start:start + want]
 
 
+# r17: second u16 is FIRST/LAST page flags, not TotalRoomNum.
+R17_A102_PAGEFLAGS_FIRST = 0x0001
+R17_A102_PAGEFLAGS_LAST = 0x0002
+R17_A102_PAGEFLAGS_SINGLE = (
+    R17_A102_PAGEFLAGS_FIRST | R17_A102_PAGEFLAGS_LAST
+)
+
+
 def _v150_build_match_room_list_response(total_room_num, rooms):
     rows = list(rooms)
     body = (
         _v48_u16(ZONE_ERR_SUCC)
-        + _v48_u16(int(total_room_num) & 0xFFFF)
+        + _v48_u16(R17_A102_PAGEFLAGS_SINGLE)
         + _v48_u16(len(rows) & 0xFFFF)
         + b"".join(_v150_pack_basic_match_room_info(r) for r in rows)
     )
@@ -5186,6 +5386,65 @@ def _v150_build_match_room_list_response(total_room_num, rooms):
         TGAME_ZN_RES_MATCHROOMLIST,
         body,
     )
+
+
+def _r17_a102_prefix_selftest():
+    one_row_prefix = (
+        _v48_u16(ZONE_ERR_SUCC)
+        + _v48_u16(R17_A102_PAGEFLAGS_SINGLE)
+        + _v48_u16(1)
+    )
+    empty_prefix = (
+        _v48_u16(ZONE_ERR_SUCC)
+        + _v48_u16(R17_A102_PAGEFLAGS_SINGLE)
+        + _v48_u16(0)
+    )
+    if one_row_prefix.hex() != "810000030001":
+        raise AssertionError(
+            f"r17 A102 one-row prefix mismatch: {one_row_prefix.hex()}"
+        )
+    if empty_prefix.hex() != "810000030000":
+        raise AssertionError(
+            f"r17 A102 empty prefix mismatch: {empty_prefix.hex()}"
+        )
+    return True
+
+
+_R17_A102_PREFIX_SELFTEST = _r17_a102_prefix_selftest()
+
+
+R20_UI_SEAT_SLOTS = 32
+R20_CAMP_SPAN = 16
+
+
+def _r20_map_pve_camp_seat(old_seat, requested_camp, fighter_capacity):
+    old_seat = int(old_seat)
+    requested_camp = int(requested_camp)
+    fighter_capacity = int(fighter_capacity)
+    if requested_camp not in (0, 1):
+        raise ValueError(f"invalid camp {requested_camp}")
+    if fighter_capacity < 2 or fighter_capacity % 2:
+        raise ValueError(f"invalid fighter_capacity {fighter_capacity}")
+    if old_seat < 0 or old_seat >= R20_UI_SEAT_SLOTS:
+        raise ValueError(f"old seat out of 32-seat UI range: {old_seat}")
+    row = old_seat % R20_CAMP_SPAN
+    visible_rows = fighter_capacity // 2
+    if row >= visible_rows:
+        raise ValueError(
+            f"seat row {row} outside active rows 0..{visible_rows - 1}"
+        )
+    return (R20_CAMP_SPAN if requested_camp == 0 else 0) + row
+
+
+def _r20_sparse_seat_mapping_selftest():
+    assert _r20_map_pve_camp_seat(0, 0, 4) == 16
+    assert _r20_map_pve_camp_seat(1, 0, 4) == 17
+    assert _r20_map_pve_camp_seat(16, 1, 4) == 0
+    assert _r20_map_pve_camp_seat(17, 1, 4) == 1
+    return True
+
+
+_R20_SPARSE_SEAT_MAPPING_SELFTEST = _r20_sparse_seat_mapping_selftest()
 
 
 def _v79_read_lp_string(body, off, max_wire_len=None):
@@ -5203,6 +5462,9 @@ def _v79_read_lp_string(body, off, max_wire_len=None):
     off += n
     text_raw = raw[:-1] if raw.endswith(b"\x00") else raw
     return text_raw.decode("latin1", "replace"), raw, off
+
+
+_R15_A103_ENTER_SELFTEST = _r15_a103_enter_request_selftest()
 
 
 def _v143b_parse_set_game_settings_request(body):
@@ -6919,6 +7181,7 @@ def handle_placeholder(conn, addr, label):
                                                     props_pkt = _v127_build_playerprops_chunk(
                                                         group,
                                                         is_last,
+                                                        session_uin=_v150_role_uin(role_state),
                                                     )
                                                     _v48_send_app(
                                                         conn, active_tgame_key,
@@ -6945,7 +7208,9 @@ def handle_placeholder(conn, addr, label):
                                                 pinfo_after_props = _v48_build_playerinfo(
                                                     0,
                                                     uin=_v150_role_uin(role_state),
-                                                    cur_role_gid=_v140_current_role_gid(),
+                                                    cur_role_gid=_r13_wire_current_role_gid(
+                                                        _v150_role_uin(role_state)
+                                                    ),
                                                     nickname=_v150_role_nickname(role_state),
                                                 )
                                                 _v48_send_app(
@@ -7074,7 +7339,10 @@ def handle_placeholder(conn, addr, label):
                                             )
 
                                             try:
-                                                plan = _v140_plan_purchase(req)
+                                                plan = _v140_plan_purchase(
+                                                    req,
+                                                    self_uin=_v150_role_uin(role_state),
+                                                )
                                             except _v140_ShopReject as reject:
                                                 log(
                                                     "MALL",
@@ -7086,6 +7354,7 @@ def handle_placeholder(conn, addr, label):
                                                     req,
                                                     [],
                                                     result=reject.result,
+                                                    self_uin=_v150_role_uin(role_state),
                                                 )
                                                 _v48_send_app(
                                                     conn,
@@ -7118,6 +7387,7 @@ def handle_placeholder(conn, addr, label):
                                                     consume_tp=plan["consume_tp"],
                                                     consume_gp=plan["consume_gp"],
                                                     consume_mp=plan["consume_mp"],
+                                                    self_uin=_v150_role_uin(role_state),
                                                 )
                                                 _v48_send_app(
                                                     conn,
@@ -7146,14 +7416,18 @@ def handle_placeholder(conn, addr, label):
                                                     active_tgame_key,
                                                     label,
                                                     prefix="post-buy",
+                                                    session_uin=_v150_role_uin(role_state),
                                                 )
 
                                                 # Re-publish the selected role only after the
                                                 # purchased props are known to the client.
                                                 pinfo = _v48_build_playerinfo(
                                                     0,
-                                                    uin=V109_UIN,
-                                                    cur_role_gid=_v140_current_role_gid(),
+                                                    uin=_v150_role_uin(role_state),
+                                                    cur_role_gid=_r13_wire_current_role_gid(
+                                                        _v150_role_uin(role_state)
+                                                    ),
+                                                    nickname=_v150_role_nickname(role_state),
                                                 )
                                                 _v48_send_app(
                                                     conn,
@@ -7177,14 +7451,20 @@ def handle_placeholder(conn, addr, label):
                                                 )
 
                                         elif app["cmd"] == TGAME_ZN_REQ_ITEM_OPERATION:
-                                            op = _v111_parse_prop_operation(
+                                            wire_op = _v111_parse_prop_operation(
                                                 app["body"]
+                                            )
+                                            session_uin = _v150_role_uin(role_state)
+                                            op = _r13_canonicalize_operation(
+                                                wire_op, session_uin
                                             )
                                             action, effective_op = _v111_apply_prop_operation(
                                                 op
                                             )
                                             effective_body = _v111_pack_prop_operation(
-                                                effective_op
+                                                _r13_project_operation(
+                                                    effective_op, session_uin
+                                                )
                                             )
                                             _v140_save_state("A200-item-operation")
                                             rsp = _v140_build_item_operation_response(
@@ -7204,24 +7484,30 @@ def handle_placeholder(conn, addr, label):
                                             )
 
                                         elif app["cmd"] == TGAME_ZN_REQ_PROP_OPERATION:
-                                            op = _v111_parse_prop_operation(
+                                            wire_op = _v111_parse_prop_operation(
                                                 app["body"]
+                                            )
+                                            session_uin = _v150_role_uin(role_state)
+                                            op = _r13_canonicalize_operation(
+                                                wire_op, session_uin
                                             )
                                             action, effective_op = (
                                                 _v111_apply_prop_operation(op)
                                             )
                                             effective_body = (
                                                 _v111_pack_prop_operation(
-                                                    effective_op
+                                                    _r13_project_operation(
+                                                        effective_op, session_uin
+                                                    )
                                                 )
                                             )
                                             log(
                                                 label,
                                                 "C2ZN_REQ_PROPOPERATION v140: "
-                                                f"op={op['operation']} "
-                                                f"subject=0x{op['subject_gid']:016x} "
-                                                f"client_target=0x{op['target_gid']:016x} "
-                                                f"client_loc=0x{op['location']:02x} "
+                                                f"op={wire_op['operation']} "
+                                                f"subject=0x{wire_op['subject_gid']:016x} "
+                                                f"client_target=0x{wire_op['target_gid']:016x} "
+                                                f"client_loc=0x{wire_op['location']:02x} "
                                                 f"=> {action}"
                                             )
                                             _v140_save_state("A008-prop-operation")
@@ -7311,6 +7597,7 @@ def handle_placeholder(conn, addr, label):
                                                     active_tgame_key,
                                                     label,
                                                     prefix="v142-bag-select-sync",
+                                                    session_uin=session_uin,
                                                 )
                                                 log(
                                                     label,
@@ -7349,8 +7636,11 @@ def handle_placeholder(conn, addr, label):
                                             ):
                                                 pinfo_role_committed = _v48_build_playerinfo(
                                                     0,
-                                                    uin=V109_UIN,
-                                                    cur_role_gid=_v140_current_role_gid(),
+                                                    uin=session_uin,
+                                                    cur_role_gid=_r13_wire_current_role_gid(
+                                                        session_uin
+                                                    ),
+                                                    nickname=_v150_role_nickname(role_state),
                                                 )
                                                 _v48_send_app(
                                                     conn, active_tgame_key,
@@ -7373,12 +7663,17 @@ def handle_placeholder(conn, addr, label):
                                                     _v143_replay_bag_gid
                                                 )
                                                 if _v143_replay_bag is not None:
-                                                    _v143_bag_body = _v111_pack_prop_operation({
-                                                        "operation": PROP_OP_EQUIP,
-                                                        "subject_gid": _v143_replay_bag_gid,
-                                                        "target_gid": V110_BAG_MOUNT_OWNER,
-                                                        "location": V109_LOC_BAG,
-                                                    })
+                                                    _v143_bag_body = _v111_pack_prop_operation(
+                                                        _r13_project_operation(
+                                                            {
+                                                                "operation": PROP_OP_EQUIP,
+                                                                "subject_gid": _v143_replay_bag_gid,
+                                                                "target_gid": V110_BAG_MOUNT_OWNER,
+                                                                "location": V109_LOC_BAG,
+                                                            },
+                                                            session_uin,
+                                                        )
+                                                    )
                                                     _v143_bag_ntf = (
                                                         _v111_build_prop_operation_notification(
                                                             _v143_bag_body
@@ -7948,53 +8243,40 @@ def handle_placeholder(conn, addr, label):
                                             )
 
                                             if is_pve_survival and requested_camp in (0, 1):
-                                                # v94: derive the seat layout from the actual
-                                                # room capacity instead of inventing a fixed
-                                                # 4- or 8-seat camp span.
-                                                #
-                                                # The live 4-player Survival UI is a 2x2 grid:
-                                                #
-                                                #   left / Camp 1      right / Camp 0
-                                                #       seat 0              seat 2
-                                                #       seat 1              seat 3
-                                                #
-                                                # Runtime evidence:
-                                                #   - A105 seat 0 renders top-left.
-                                                #   - v88's 0->1 rendered one row DOWN on left.
-                                                #   - v90's 0->4 disappeared because seat 4 is
-                                                #     outside FighterCapacity=4.
-                                                #
-                                                # Therefore seats are column-major and each
-                                                # camp owns FighterCapacity/2 slots.
-                                                per_camp = fighter_capacity // 2
-                                                row = old_seat % per_camp
-                                                target_base = (
-                                                    per_camp
-                                                    if requested_camp == 0
-                                                    else 0
-                                                )
-                                                new_seat = target_base + row
+                                                # r20: verified stock PH With32 sparse-seat layout.
+                                                try:
+                                                    new_seat = _r20_map_pve_camp_seat(
+                                                        old_seat,
+                                                        requested_camp,
+                                                        fighter_capacity,
+                                                    )
+                                                except ValueError as seat_e:
+                                                    log(
+                                                        "ROOM",
+                                                        "r20 sparse seat map rejected request "
+                                                        f"uin={_v150_role_uin(role_state)} "
+                                                        f"old={old_seat} camp={requested_camp}: {seat_e}",
+                                                    )
+                                                    new_seat = old_seat
 
+                                                row = old_seat % R20_CAMP_SPAN
                                                 log(
                                                     label,
-                                                    "C2ZN_REQ_CHANGEMATCHROOMCAMP v94: "
+                                                    "C2ZN_REQ_CHANGEMATCHROOMCAMP r20-with32: "
                                                     f"camp=0x{requested_camp:02x} "
                                                     f"current_camp=0x{current_camp:02x} "
                                                     f"mode=0x{mode_id:08x} "
                                                     f"fighters={fighter_capacity} "
-                                                    f"per_camp={per_camp} "
-                                                    f"old_seat={old_seat} "
+                                                    f"camp_span={R20_CAMP_SPAN} "
+                                                    f"row={row} old_seat={old_seat} "
                                                     f"new_seat={new_seat} "
                                                     f"body={app['body'].hex()}"
                                                 )
 
                                                 rsp = _v88_build_res_change_match_room_camp()
                                                 _v48_send_app(
-                                                    conn,
-                                                    active_tgame_key,
-                                                    rsp,
-                                                    label,
-                                                    "ZN2C_RES_CHANGEMATCHROOMCAMP v94 "
+                                                    conn, active_tgame_key, rsp, label,
+                                                    "ZN2C_RES_CHANGEMATCHROOMCAMP r20 "
                                                     "cmd=0xA10E result=0x8100"
                                                 )
 
@@ -8010,11 +8292,22 @@ def handle_placeholder(conn, addr, label):
                                                     except RoomRegistryError as room_e:
                                                         log(
                                                             "ROOM",
-                                                            f"r11 camp/seat move rejected uin={_v150_role_uin(role_state)} "
+                                                            f"r20 camp/seat move rejected "
+                                                            f"uin={_v150_role_uin(role_state)} "
                                                             f"old={old_seat} new={new_seat}: {room_e}",
                                                         )
                                                     else:
                                                         _v150_sync_role_states(moved_room)
+                                                        seat_refresh = _v150_build_ntf_enter_match_room(
+                                                            moved_member
+                                                        )
+                                                        _v48_send_app(
+                                                            conn, active_tgame_key,
+                                                            seat_refresh, label,
+                                                            "ZN2C_NTF_ENTERMATCHROOM r20-pre-A10F "
+                                                            f"cmd=0xA106 uin={moved_member['uin']} "
+                                                            f"seat={moved_member['seat_index']}",
+                                                        )
                                                         ntf = _v88_build_ntf_change_match_room_camp(
                                                             registry_old_seat,
                                                             int(moved_member["seat_index"]),
@@ -8022,23 +8315,26 @@ def handle_placeholder(conn, addr, label):
                                                         sent_camp = _v150_broadcast_room(
                                                             moved_room["room_id"],
                                                             ntf,
-                                                            "ZN2C_NTF_CHANGEMATCHROOMCAMP r11-shared "
+                                                            "ZN2C_NTF_CHANGEMATCHROOMCAMP r20-shared "
                                                             f"cmd=0xA10F old_seat={registry_old_seat} "
                                                             f"new_seat={moved_member['seat_index']}",
                                                         )
                                                         if not sent_camp:
                                                             _v48_send_app(
-                                                                conn, active_tgame_key, ntf, label,
-                                                                "ZN2C_NTF_CHANGEMATCHROOMCAMP v94-fallback "
+                                                                conn, active_tgame_key,
+                                                                ntf, label,
+                                                                "ZN2C_NTF_CHANGEMATCHROOMCAMP r20-fallback "
                                                                 f"cmd=0xA10F old_seat={registry_old_seat} "
                                                                 f"new_seat={moved_member['seat_index']}",
                                                             )
-                                                        role_state["v88_match_seat"] = int(moved_member["seat_index"])
+                                                        role_state["v88_match_seat"] = int(
+                                                            moved_member["seat_index"]
+                                                        )
                                                         role_state["v88_match_camp"] = requested_camp
                                                 else:
                                                     log(
                                                         label,
-                                                        "v94: requested camp already owns "
+                                                        "r20: requested camp already owns "
                                                         f"seat={old_seat}; A10F suppressed"
                                                     )
 
@@ -8558,12 +8854,17 @@ def handle_placeholder(conn, addr, label):
                                                 # only missing server-side message from the
                                                 # known-good transaction, so send the exact pair
                                                 # here without rebuilding A006.
-                                                bag_op = _v111_pack_prop_operation({
-                                                    "operation": PROP_OP_EQUIP,
-                                                    "subject_gid": V109_BAG1_GID,
-                                                    "target_gid": V110_BAG_MOUNT_OWNER,
-                                                    "location": V109_LOC_BAG,
-                                                })
+                                                bag_op = _v111_pack_prop_operation(
+                                                    _r13_project_operation(
+                                                        {
+                                                            "operation": PROP_OP_EQUIP,
+                                                            "subject_gid": V109_BAG1_GID,
+                                                            "target_gid": V110_BAG_MOUNT_OWNER,
+                                                            "location": V109_LOC_BAG,
+                                                        },
+                                                        _v150_role_uin(role_state),
+                                                    )
+                                                )
                                                 bag_rsp = _v111_build_prop_operation_response(bag_op)
                                                 _v48_send_app(
                                                     conn, active_tgame_key,
@@ -9748,7 +10049,12 @@ def listen_on_port(port, label, sock=None):
 # Startup
 # ---------------------------------------------------------------------------
 
-print("[BOOT] BUILD=v143b-STABLE + DS SPAWNER r11 + v48 LAZY/LATCH + v72 ZERO-DSKEY + SHARED ROOM JOIN + PVE CLIENT-MAP/A11E SETTINGS (NO NEW-ACCOUNT BRANCH)")
+print("[BOOT] BUILD=v143b-STABLE + VERIFIED TWO-CLIENT LOBBY/ROOM r20 + DS SPAWNER + PVE CLIENT-MAP/A11E SETTINGS (NO NEW-ACCOUNT BRANCH)")
+print(f"[BOOT] r13 identity projection self-test={'PASS' if _R13_IDENTITY_PROJECTION_SELFTEST else 'FAIL'}")
+print(f"[BOOT] r14 A102 enterability projection self-test={'PASS' if _R14_A102_PROJECTION_SELFTEST else 'FAIL'}")
+print(f"[BOOT] r15 live A103 EnterRoomByRoomId self-test={'PASS' if _R15_A103_ENTER_SELFTEST else 'FAIL'}")
+print(f"[BOOT] r17 A102 FIRST|LAST self-test={'PASS' if _R17_A102_PREFIX_SELFTEST else 'FAIL'} pageflags=0x{R17_A102_PAGEFLAGS_SINGLE:04x}")
+print(f"[BOOT] r20 With32 seat mapping self-test={'PASS' if _R20_SPARSE_SEAT_MAPPING_SELFTEST else 'FAIL'} left=0/1 right=16/17")
 _v139_protocol_boot_report()
 print("[BOOT] Default character: Sofia item=100600 + components 300121/300122/100602; primary=QBS09 item=100497 role_gid=0x%016X" % V109_ROLE_GID)
 print(

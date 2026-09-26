@@ -37,8 +37,8 @@ Experimental or unverified work is excluded from `main` until it is reproducibly
 
 | Area | Status | Current limitation |
 |---|---:|---|
-| Lobby browser | 🟡 | v143b exposes synthetic Survival rooms plus a client-created room slot. This is not a complete dynamic production-style lobby service. |
-| Room create/list behavior | 🟡 | Foundation is present, but the complete multiplayer room lifecycle is not finished. |
+| Lobby browser | ✅ | Live two-stock-client PH validation covers automatic A100/A102 first paint, enterable room rows, and shared room visibility. A102 now uses verified FIRST|LAST page flags, so the stock list paints without a manual filter toggle. |
+| Room create/list behavior | ✅ | Core two-client create/list/join/leave/ready/camp-switch behavior is live-verified. Stock A103 room entry, shared A105/A106 state, cleanup/owner transfer, and the With32 sparse camp-seat layout are integrated. Larger-scale production policy remains separate. |
 | Friends | 🟡 | v143b includes A303-A30A foundation and a local test friend path; real two-client persisted social behavior belongs to later experimental work and is not part of the public baseline. |
 | Private chat | 🟡 | v143b uses a LocalFriend echo/test path. Real friend-to-friend online/offline delivery is not part of this stable baseline. |
 | Clans | 🟡 | Basic create/name/persistence behavior exists. Large nested clan detail/member responses were deliberately not guessed and still require verification. |
@@ -55,7 +55,7 @@ Experimental or unverified work is excluded from `main` until it is reproducibly
 | First-time account creation | 🔴 | Experimental v95+ work is intentionally excluded because it is not considered stable. |
 | First-login nickname UI | 🔴 | Not part of v143b and not yet reproducibly verified for the public baseline. |
 | New-account starter inventory/profile lifecycle | 🔴 | Depends on the experimental account-creation work and is intentionally excluded. |
-| Real multi-account login lifecycle | 🔴 | Experimental implementations exist, but this is not part of stable v143b. |
+| Real multi-account login lifecycle | 🟡 | Concurrent local stock clients now receive distinct process-local UINs and identity-safe wire GIDs for multiplayer validation. Persistent real-account login/inventory isolation still belongs to the SQLite account work. |
 | Real two-client friends/private chat | 🔴 | Not included in v143b; later work still needs proper stock-client validation before promotion. |
 | Full clan UI/detail/member rendering | 🔴 | Nested ClanDetailedInfo/MemberInfo wire layouts are not fully verified. |
 | Survival enemy/round backend lifecycle | 🔴 | Not implemented as a complete public stable backend. |
@@ -73,11 +73,11 @@ These are good contribution targets:
 
 1. **Protocol documentation** — turn recovered command IDs and packet layouts into readable, reproducible documentation.
 2. **Tests** — add unit tests and sanitized packet fixtures for VERSION, AUTH, DIR, ROLE, and ZONE behavior.
-3. **Real room lifecycle** — replace synthetic/testing room behavior with a clean dynamic room model.
+3. **PvE result/reward lifecycle** — recover authoritative completion plus the stock results/rewards presentation for every supported stock-selected PvE map, then award/persist EXP/AP exactly once.
 4. **Two-client social verification** — implement and verify friends, presence, friend requests, private chat, and reconnect behavior without depending on the broken first-login work.
 5. **Clan completion** — recover and verify the nested clan detail/member structures used by the stock PH client.
 6. **Existing-account persistence cleanup** — make stable existing-profile persistence easier to configure and test.
-7. **PvE lifecycle follow-up** — keep expanding verified round completion and results/rewards now that the generic stock-selected map and DS handoff path are integrated.
+7. **PvE lifecycle follow-up** — current priority: authoritative round completion, reward calculation/persistence, and stock client result/reward UI now that the lobby/room and generic DS handoff paths are integrated.
 8. **Dedicated-server scaling and capacity controls** — harden DS pooling, capacity rejection, one-lobby-per-player rules, rate limits, idempotency, and multi-host orchestration.
 9. **Match lifecycle** — room start, loading, gameplay session, match completion, rewards/results, and clean teardown.
 10. **Developer tooling** — packet decoders, protocol inspectors, sanitized logging, automated smoke tests, and reproducible test harnesses.

@@ -60,8 +60,12 @@ Goal: promote only live-verified multiplayer frontend/backend behavior into the 
 
 Tasks:
 
-- [ ] Replace synthetic room examples with a clean dynamic room lifecycle
-- [ ] Verify room create / enter / leave / ready behavior with stock client
+- [x] Replace the synthetic single-room path with the shared dynamic room registry used by the stock lobby flow
+- [x] Verify room create / list / enter / leave / ready behavior with two stock clients
+- [x] Verify automatic A100/A102 first paint with FIRST|LAST page flags (no filter-toggle workaround)
+- [x] Verify live A103 EnterRoomByRoomId and shared A105/A106 room state
+- [x] Verify owner transfer / disconnect cleanup for the shared room
+- [x] Verify PH With32 sparse camp switching (left 0/1 ↔ right 16/17) without the player row disappearing
 - [ ] Verify two-client friend request / accept / remove flow
 - [ ] Verify two-client private chat
 - [ ] Verify reconnect/offline-delivery behavior
@@ -96,6 +100,18 @@ The broader enemy/objective/round-completion/result/reward lifecycle remains sep
 **Status: partial**
 
 Goal: build on the now-integrated stock PvE reservation/handoff path and finish production-style capacity controls plus the full gameplay → result → lobby lifecycle.
+
+### Current next target — PvE results and rewards
+
+The lobby/room flow is complete enough for now. The active target is the post-match path for **every supported stock-selected PvE map**:
+
+- [ ] Detect authoritative successful PvE completion from AFDEV/DS instead of trusting the client
+- [ ] Recover the stock result/reward command and payload consumed by the retail PH client
+- [ ] Show earned rewards in the stock results/rewards UI
+- [ ] Award EXP and AP with difficulty-aware server rules
+- [ ] Persist rewards and match history exactly once (idempotent settlement)
+- [ ] Log a concise server-side reward summary for debugging/auditing
+- [ ] Verify solo and two-client settlement, including reconnect/duplicate-packet safety
 
 Tasks:
 
