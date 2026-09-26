@@ -10,6 +10,16 @@
 
 An unofficial **Assault Fire PH** preservation/server-emulation project.
 
+
+> [!IMPORTANT]
+> **Server independence disclaimer**
+>
+> This repository provides emulator software and preservation/research tooling only.
+>
+> Any private, public, community, hosted, or third-party server that uses, modifies, or is based on this repository is **independently operated** and is **not affiliated with, endorsed by, sponsored by, controlled by, or officially operated by this repository or its maintainers**.
+>
+> The repository maintainers are not responsible for third-party server operators, accounts, rules, moderation, content, security, availability, conduct, or services.
+
 > [!IMPORTANT]
 > This project is currently made for **Assault Fire PH v1.0.0.24 only**.
 >
