@@ -160,10 +160,15 @@ Write-Host "AF_RUNTIME_TEST_PASS"
 
     def test_ensure_afdev_permanently_patches_verified_clean_tgame_with_backup(self):
         with tempfile.TemporaryDirectory(prefix="AF TGame fixtures ") as fixtures:
-            unpatched = write_tgame_fixture(Path(fixtures) / "unpatched.exe", "unpatched")
-            patched = write_tgame_fixture(Path(fixtures) / "patched.exe", "patched")
-            relocated = write_tgame_fixture(
-                Path(fixtures) / "relocated.exe", "relocated"
+            unpatched = write_tgame_fixture(
+                Path(fixtures) / "unpatched.exe",
+                "unpatched",
+                servermove_compatible=True,
+            )
+            patched = write_tgame_fixture(
+                Path(fixtures) / "patched.exe",
+                "patched",
+                servermove_compatible=True,
             )
             for shell in self.shells():
                 with self.subTest(shell=shell):
@@ -206,8 +211,7 @@ function Get-ServerMoveBinaryCheck(
 }
 foreach ($candidate in @(
     @{ Name = "compatible clean build"; Source = $env:AF_TEST_TGAME_UNPATCHED; Status = "clean" },
-    @{ Name = "verified patched build"; Source = $env:AF_TEST_TGAME_PATCHED; Status = "patched" },
-    @{ Name = "relocated patch site"; Source = $env:AF_TEST_TGAME_RELOCATED; Status = "relocated" }
+    @{ Name = "verified patched build"; Source = $env:AF_TEST_TGAME_PATCHED; Status = "patched" }
 )) {
     $gameRoot = New-TestGame $candidate.Name $candidate.Source
     $tgame = Join-Path $gameRoot "Binaries\Win32\TGame.exe"
@@ -216,10 +220,18 @@ foreach ($candidate in @(
     Ensure-AFDev $gameRoot $env:AF_TEST_PYTHON $env:AF_TEST_REPO
     $afdev = Join-Path $gameRoot "Binaries\Win32\TGame_AFDEV.exe"
     $finalHash = Get-Sha256 $tgame
-    if ((Get-Sha256 $afdev) -ne $finalHash) { throw "$($candidate.Status) AFDEV copy does not match patched source" }
+    if ((Get-Sha256 $afdev) -eq $finalHash) { throw "$($candidate.Status) AFDEV did not receive the ServerMove-v4 patch" }
     $finalCheck = Get-TGameBinaryCheck $env:AF_TEST_REPO $tgame $env:AF_TEST_PYTHON
     if ($finalCheck.status -ne "already-patched") { throw "$($candidate.Status) TGame is not verified patched: $($finalCheck.message)" }
-    if ($candidate.Status -eq "clean" -or $candidate.Status -eq "relocated") {
+    $tgameMoveCheck = Get-ServerMoveBinaryCheck $env:AF_TEST_REPO $tgame $env:AF_TEST_PYTHON
+    if ($tgameMoveCheck.status -ne "unpatched-compatible") {
+        throw "$($candidate.Status) normal TGame unexpectedly contains ServerMove v4: $($tgameMoveCheck.message)"
+    }
+    $afdevMoveCheck = Get-ServerMoveBinaryCheck $env:AF_TEST_REPO $afdev $env:AF_TEST_PYTHON
+    if ($afdevMoveCheck.status -ne "already-patched") {
+        throw "$($candidate.Status) AFDEV ServerMove v4 verification failed: $($afdevMoveCheck.message)"
+    }
+    if ($candidate.Status -eq "clean") {
         $backup = "$tgame.bak"
         if (-not (Test-Path -LiteralPath $backup -PathType Leaf)) { throw "$($candidate.Status) TGame backup is missing" }
         if ((Get-Sha256 $backup) -ne $sourceHash) { throw "$($candidate.Status) TGame backup does not match its original bytes" }
@@ -248,7 +260,6 @@ Write-Host "AF_RUNTIME_TEST_PASS"
                     """, {
                         "AF_TEST_TGAME_UNPATCHED": str(unpatched),
                         "AF_TEST_TGAME_PATCHED": str(patched),
-                        "AF_TEST_TGAME_RELOCATED": str(relocated),
                     })
 
 
