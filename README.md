@@ -1029,7 +1029,7 @@ $env:AF_GAME_DIR = "D:\AssaultFirePH\Binaries\Win32"
 
 When a PvE room starts, the emulator handles the dedicated-server lifecycle automatically.
 
-The local AFDEV copy also receives the verified native ServerMove-v4 patch automatically. The loader validates the live restored body before using it and falls back safely when the disk patch is not present. Steel/TGIF startup temporarily keeps the stock stripped ServerMove stub during map `OPEN`, then restores v4 after LoadMap stage 7 before the client is released.
+The local AFDEV copy also receives the verified native ServerMove-v4 patch automatically. The loader validates the live restored body and now refuses to start gameplay if the local AFDEV copy still has the stripped stock stub; the old runtime movement fallback has been removed. Steel/TGIF startup temporarily keeps the stock stripped ServerMove stub during map `OPEN`, then restores v4 after LoadMap stage 7 before the client is released.
 
 You do not normally start AFDEV or run the ServerMove patcher manually.
 
