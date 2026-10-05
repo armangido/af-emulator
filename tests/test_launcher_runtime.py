@@ -182,33 +182,6 @@ function New-TestGame([string]$Name, [string]$Source) {
     Copy-Item -LiteralPath $Source -Destination (Join-Path $win32 "TGame.exe")
     return $gameRoot
 }
-# Keep this integration test focused on Ensure-AFDev's datetime/backup/copy
-# control flow. The native ServerMove-v4 reconstruction has dedicated tests.
-$script:AF_TEST_SERVERMOVE_PATCHED = @{}
-function Get-ServerMoveBinaryCheck(
-    [string]$RepoRoot,
-    [string]$Path,
-    [string]$VenvPython,
-    [switch]$Apply
-) {
-    if ($Apply) {
-        $script:AF_TEST_SERVERMOVE_PATCHED[$Path] = $true
-        return [pscustomobject]@{
-            status = "patched"
-            message = "test ServerMove-v4 applied"
-        }
-    }
-    if ($script:AF_TEST_SERVERMOVE_PATCHED.ContainsKey($Path)) {
-        return [pscustomobject]@{
-            status = "already-patched"
-            message = "test ServerMove-v4 present"
-        }
-    }
-    return [pscustomobject]@{
-        status = "unpatched-compatible"
-        message = "test ServerMove-v4 compatible"
-    }
-}
 foreach ($candidate in @(
     @{ Name = "compatible clean build"; Source = $env:AF_TEST_TGAME_UNPATCHED; Status = "clean" },
     @{ Name = "verified patched build"; Source = $env:AF_TEST_TGAME_PATCHED; Status = "patched" }
