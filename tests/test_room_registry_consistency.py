@@ -330,11 +330,9 @@ class ServerStaticSafetyTests(unittest.TestCase):
         self.assertIn("Persistent TGame multi-session lookup", server)
         self.assertIn("TX TGAME cmd04 IDENT for persistent resume", server)
         self.assertIn("ZN2C_RES_LOGIN RESTART-RESUME-IDENT-A001", server)
-        self.assertIn(
-            "proactive A001 replay sent; waiting for FF05 "
-            "instead of waiting for a fresh A000",
-            server,
-        )
+        self.assertIn("Persistent TGame transport resumed; ", server)
+        self.assertIn("proactive A001 replay sent; waiting for FF05 ", server)
+        self.assertIn("instead of waiting for a fresh A000", server)
         self.assertNotIn(
             "waiting for client C2ZN_REQ_LOGIN before "
             "sending the app login response",
