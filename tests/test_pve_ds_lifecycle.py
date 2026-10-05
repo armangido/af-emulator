@@ -26,8 +26,8 @@ class PVERuntimeTests(unittest.TestCase):
         self.assertIn("shutil.copy2(source_exe, exe)", s)
         self.assertIn("without whole-file hash gating", s)
         self.assertIn("runtime patch-site signatures will still be validated", s)
-        self.assertIn("Runtime addresses remain build-specific and every required", s)
-        self.assertIn("patch site is validated before execution resumes.", s)
+        self.assertIn("Runtime addresses remain build-specific and every", s)
+        self.assertIn("required patch site is validated before execution resumes.", s)
         self.assertIn("verify_and_patch(", s)
 
 
