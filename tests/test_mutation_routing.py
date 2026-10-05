@@ -80,14 +80,15 @@ class MutationRoutingTests(unittest.TestCase):
         # The package includes the latest main commit's A119 quit-match patch.
         self.assertIn("TGAME_ZN_NTF_QUITMATCH = 0xA119", server)
         self.assertIn("TGAME_AFDEV_MODE_IDS = frozenset(AFDEV_MODE_IDS)", server)
-        self.assertIn("BIO_PC_VTABLE_V49 = 0x01E42FE0", loader)
-        self.assertIn("_validate_movement_vtable_v49", loader)
-        self.assertIn("TGBioPlayerController", loader)
+        self.assertIn("BIO_MODE_ID_V49 = 0x00000204", loader)
+        self.assertIn("elif int(args.mode_id) == BIO_MODE_ID_V49:", loader)
         self.assertIn("Native TGBioGame.TGBioMatch startup", loader)
         self.assertIn("args.mode_id,", loader)
-        # Retain the latest main-branch remote-facing replication patch.
-        self.assertIn("Pawn.Rotation.Yaw <- ViewYaw for remote-facing replication", loader)
-        self.assertIn('emit(b"\\xC1\\xE8\\x10")                  # eax = ViewYaw', loader)
+        self.assertIn("servermove_v4_state", loader)
+        # Mutation now uses the shared native ServerMove-v4 entry; the retired
+        # runtime movement-vtable bridge must not be reintroduced.
+        self.assertNotIn("BIO_PC_VTABLE_V49", loader)
+        self.assertNotIn("_validate_movement_vtable_v49", loader)
 
 
 if __name__ == "__main__":
