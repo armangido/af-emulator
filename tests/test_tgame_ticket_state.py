@@ -176,25 +176,27 @@ class TGameTicketStateTests(unittest.TestCase):
             get_unexpired_session_uins(db_path=self.db_path),
             set(),
         )
-        self.assertTrue(
-            save_transport_key(
-                self.ticket,
-                self.uin,
-                self.client_ip,
-                self.transport_key,
-                ttl_seconds=0.03,
-                **self._kwargs(),
+        now = time.time()
+        with patch("server.tgame_ticket_state.time.time", return_value=now) as clock:
+            self.assertTrue(
+                save_transport_key(
+                    self.ticket,
+                    self.uin,
+                    self.client_ip,
+                    self.transport_key,
+                    ttl_seconds=0.03,
+                    **self._kwargs(),
+                )
             )
-        )
-        self.assertEqual(
-            get_unexpired_session_uins(db_path=self.db_path),
-            {self.uin},
-        )
-        time.sleep(0.05)
-        self.assertEqual(
-            get_unexpired_session_uins(db_path=self.db_path),
-            set(),
-        )
+            self.assertEqual(
+                get_unexpired_session_uins(db_path=self.db_path),
+                {self.uin},
+            )
+            clock.return_value = now + 0.05
+            self.assertEqual(
+                get_unexpired_session_uins(db_path=self.db_path),
+                set(),
+            )
 
     def test_expired_ticket_row_is_removed_and_revocation_is_immediate(self) -> None:
         self.assertTrue(
