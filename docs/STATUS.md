@@ -30,8 +30,8 @@ Experimental or unverified work is excluded from `main` until it is reproducibly
 | Clan ID persistence | ✅ | v143b persists clan membership/ClanID and reflects it in PlayerInfo. |
 | Clan name verification/create request shapes | ✅ | Known v143b request/response shapes are implemented on `main`. |
 | DS UDP bridge v9 | ✅ | Multi-peer first-packet latch bridge used by the integrated v143b PvE handoff. |
-| AFDEV PvE loader v48 | ✅ | Lazy multi-instance AFDEV loader started on the first valid DS UDP packet; launches the room-selected installed map/game class and recognizes the verified disk ServerMove-v4 path. |
-| Native ServerMove v4 | ✅ | Public one-click setup patches only the local `TGame_AFDEV.exe`; live traces verified the exact reconstructed body driving authoritative movement in Survival and Steel Fortress. Steel/TGIF defers v4 only during map OPEN and restores it after LoadMap stage 7. |
+| AFDEV PvE loader v48 | ✅ | Lazy multi-instance AFDEV loader started on the first valid DS UDP packet; launches the room-selected installed map/game class and requires the verified disk ServerMove-v4 path. |
+| Native ServerMove v4 | ✅ | Public one-click setup patches only the local `TGame_AFDEV.exe`; live traces verified the exact reconstructed body driving authoritative movement in Survival and Steel Fortress. The older runtime movement bridge is retired; Steel/TGIF defers v4 only during map OPEN and restores it after LoadMap stage 7. |
 | PvE dedicated-server/gameplay handoff + map selection | ✅ | v143b integrates the lazy v48 AFDEV + v9 bridge path, zero-DSKey readiness gate, stock A10A/A11E map/settings propagation, and player-scoped DS cleanup. |
 | Dedicated-server reservation and UE3 handoff | ✅ | A10A reserves capacity, A3A0/A113 arm the DS path, A11A assigns the endpoint, and AFDEV starts lazily on the first valid DS UDP packet. |
 
