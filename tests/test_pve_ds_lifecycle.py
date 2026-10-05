@@ -18,6 +18,7 @@ class PVERuntimeTests(unittest.TestCase):
         self.assertIn("SESSION_READY", s)
         self.assertIn("zero_dskey", s)
         self.assertIn("native_movement", s)
+        self.assertIn("servermove_v4", s)
 
     def test_loader_builds_private_afdev_copy_and_validates_runtime_signatures(self):
         s = self.text("tools/server_spawner/AFDevLoader_v48_spawner_multi_instance.py")
@@ -30,19 +31,17 @@ class PVERuntimeTests(unittest.TestCase):
         self.assertIn("verify_and_patch(", s)
 
 
-    def test_loader_replicates_authoritative_pawn_yaw_to_remote_clients(self):
+    def test_loader_requires_disk_servermove_v4_without_runtime_movement_bridge(self):
         s = self.text("tools/server_spawner/AFDevLoader_v48_spawner_multi_instance.py")
-        self.assertIn("Pawn.Rotation.Yaw <- ViewYaw for remote-facing replication", s)
-        self.assertIn(
-            'emit(b"\\xC1\\xE8\\x10")                  # eax = ViewYaw',
-            s,
-        )
-        self.assertIn(
-            'emit(b"\\x89\\x83" + struct.pack("<I", PVE_ACTOR_ROTATION_OFFSET_V48 + 0x4))',
-            s,
-        )
-        self.assertIn("PVE_MOVEAUTONOMOUS_IMPL_V48 = 0x008F24B0", s)
-        self.assertIn("PVE_SERVERMOVE_ERROR_IMPL_V48 = 0x008F2620", s)
+        self.assertIn("native ServerMove v4 is required", s)
+        self.assertIn("SERVERMOVE_V4_HEAD", s)
+        self.assertIn('"servermove_v4": bool(servermove_v4_state)', s)
+        self.assertIn("no runtime movement bridge is installed", s)
+        self.assertNotIn("def _build_native_movement_bridge_v48", s)
+        self.assertNotIn("def install_native_movement_bridge_v48", s)
+        self.assertNotIn("--no-native-movement", s)
+        self.assertNotIn("PVE_MOVEAUTONOMOUS_IMPL_V48", s)
+        self.assertNotIn("PVE_SERVERMOVE_ERROR_IMPL_V48", s)
 
     def test_multi_peer_bridge_is_present(self):
         s = self.text("tools/bridge/af_ds_udp_bridge_v9_multi_peer_latch.py")
