@@ -267,6 +267,8 @@ The mech's forward/backward/steering behavior was visually confirmed correct in 
 
 Steel/TGIF additionally requires a startup guard: the AFDEV loader temporarily restores the stock stripped ServerMove stub during map `OPEN`, then restores and verifies the disk ServerMove-v4 JMP after LoadMap stage 7 and before `SESSION_READY`.
 
+With that live validation complete, the older AFDEV in-memory movement bridge is no longer part of the supported runtime. The loader now requires the verified disk-restored ServerMove-v4 body and fails closed when only the stripped stock stub is present. The v9 DS UDP bridge remains separate network/session transport and does not implement movement.
+
 The one remaining explicit fidelity gap is the exact PH `Pawn.MaxPitchLimit` memory offset used for swimming/flying pitch clamping. The public implementation intentionally does not guess that offset.
 
 Source implementation: `tools/patches/tgame_servermove_v4.py` and `tools/server_spawner/AFDevLoader_v48_spawner_multi_instance.py`.
