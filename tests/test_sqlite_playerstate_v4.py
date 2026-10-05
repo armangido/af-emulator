@@ -135,7 +135,8 @@ assert "error_code=1" in source
 assert 'auth_uid = int(auth_account["uin"])' in source
 assert "resolved_uid = _r12_uid_for_login(_auth_pid, auth_login_name)" in source
 assert "_v140_select_player(role_state[\"uin\"])" in source
-assert "_V140_PLAYER_STATE.save(reason)" in source
+assert "uin = _V140_PLAYER_STATE.save(" in source
+assert "moneyflow_rows=moneyflow_rows" in source
 assert "os.replace(tmp, V140_MALL_STATE_PATH)" not in source
 assert "PLAYER_DB.claim_nickname(" in source
 assert "legacy JSON import" in source
