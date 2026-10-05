@@ -73,7 +73,7 @@ class OneClickLauncherTests(unittest.TestCase):
 
     def test_launcher_prints_revision_for_stale_zip_diagnosis(self):
         s = self.text(SCRIPT)
-        self.assertIn('2026-09-29-oneclick-v35-local-registration', s)
+        self.assertIn('2026-10-05-oneclick-v36-servermove-v4', s)
         self.assertIn('Launcher revision: $LAUNCHER_REVISION', s)
 
     def test_launcher_asks_before_replacing_private_key(self):
