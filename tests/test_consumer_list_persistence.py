@@ -23,6 +23,7 @@ class ConsumerListPersistenceTests(unittest.TestCase):
                 }
             )
             code = r"""
+import os
 import struct
 import time
 
