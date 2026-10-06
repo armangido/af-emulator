@@ -5042,16 +5042,95 @@ def _v173_character_accessory_slot(item_id):
     return V173_CHARACTER_ACCESSORY_SLOTS.get(int(item_id))
 
 
+def _v173_character_bundle_component_roles():
+    """Map bundled character appearance parts to the role roots they belong to."""
+    component_roles = {}
+    for bundle in V140_COMMODITY_BUNDLES.values():
+        items = tuple(int(item_id) for item_id in bundle)
+        if sum(300000 <= item_id < 400000 for item_id in items) < 2:
+            continue
+        role_item_id = None
+        for item_id in items:
+            if _v140_role_slot(item_id) is not None:
+                role_item_id = item_id
+                continue
+            if (role_item_id is not None
+                    and _v173_character_accessory_slot(item_id) is not None):
+                component_roles.setdefault(item_id, set()).add(role_item_id)
+    return {
+        item_id: frozenset(role_item_ids)
+        for item_id, role_item_ids in component_roles.items()
+    }
+
+
+V173_CHARACTER_BUNDLE_COMPONENT_ROLE_ITEMS = (
+    _v173_character_bundle_component_roles()
+)
+
+
+def _v173_is_character_bundle_component(prop):
+    item_id = int(prop.get("item_id", 0))
+    return (
+        item_id in V173_CHARACTER_BUNDLE_COMPONENT_ROLE_ITEMS
+        and int(prop.get("durability_max", prop.get("durability", 0))) == 0
+    )
+
+
 def _v173_repair_accessory_owners():
-    """Return accessories incorrectly mounted on backpacks/root to storage."""
+    """Restore bundled character parts and return misplaced accessories to storage."""
     invalid_owners = _v141_bag_gids() | {V110_BAG_MOUNT_OWNER}
+    by_gid = {int(prop["gid"]): prop for prop in V111_INVENTORY}
     changes = []
     for prop in V111_INVENTORY:
-        if (_v173_character_accessory_slot(prop.get("item_id", 0)) is not None
-                and int(prop.get("owner_gid", 0)) in invalid_owners):
-            before = (int(prop["owner_gid"]), int(prop["location"]))
+        item_id = int(prop.get("item_id", 0))
+        owner_gid = int(prop.get("owner_gid", 0))
+        role_item_ids = V173_CHARACTER_BUNDLE_COMPONENT_ROLE_ITEMS.get(item_id)
+        if role_item_ids and _v173_is_character_bundle_component(prop):
+            current_owner = by_gid.get(owner_gid)
+            if (
+                current_owner is not None
+                and int(current_owner.get("item_id", 0)) in role_item_ids
+                and _v140_role_slot(int(current_owner.get("item_id", 0))) is not None
+            ):
+                continue
+
+            role_roots = [
+                candidate for candidate in V111_INVENTORY
+                if int(candidate.get("item_id", 0)) in role_item_ids
+                and _v140_role_slot(int(candidate.get("item_id", 0))) is not None
+            ]
+            if role_roots:
+                selected_role_gid = int(_v140_current_role_gid())
+                target = next(
+                    (candidate for candidate in role_roots
+                     if int(candidate["gid"]) == owner_gid),
+                    None,
+                ) or next(
+                    (candidate for candidate in role_roots
+                     if int(candidate["gid"]) == selected_role_gid),
+                    role_roots[0],
+                )
+                default_loc = int(V140_ITEM_DEFAULT_LOCATIONS.get(item_id, -1))
+                location = 0xFF if default_loc < 0 else default_loc
+                before = (owner_gid, int(prop["location"]))
+                prop["owner_gid"], prop["location"] = int(target["gid"]), location
+                changes.append((
+                    int(prop["gid"]), item_id, before,
+                    (int(target["gid"]), location),
+                ))
+            elif owner_gid in invalid_owners:
+                before = (owner_gid, int(prop["location"]))
+                prop["owner_gid"], prop["location"] = 0, V109_LOC_BAG
+                changes.append((
+                    int(prop["gid"]), item_id, before, (0, V109_LOC_BAG),
+                ))
+            continue
+
+        if (_v173_character_accessory_slot(item_id) is not None
+                and owner_gid in invalid_owners):
+            before = (owner_gid, int(prop["location"]))
             prop["owner_gid"], prop["location"] = 0, V109_LOC_BAG
-            changes.append((int(prop["gid"]), int(prop["item_id"]), before))
+            changes.append((int(prop["gid"]), item_id, before, (0, V109_LOC_BAG)))
     return changes
 
 
@@ -5078,11 +5157,16 @@ def _v173_apply_accessory_equip(op):
                          location=int(subject.get("location", V109_LOC_BAG)))
         return "v173 accessory equip ignored: no owned character root", effective
 
-    # Exclusivity is within this character, never across bag weapon sockets.
+    # Accessories share sockets with bundled role appearance parts. Keep
+    # those parts mounted; only standalone accessories replace one another.
     for other in V111_INVENTORY:
-        if (other is not subject and int(other.get("owner_gid", 0)) == owner
-                and int(other.get("location", V109_LOC_BAG)) == slot):
-            other["owner_gid"], other["location"] = 0, V109_LOC_BAG
+        if (other is subject or int(other.get("owner_gid", 0)) != owner
+                or int(other.get("location", V109_LOC_BAG)) != slot):
+            continue
+        if (_v173_is_character_bundle_component(subject)
+                or _v173_is_character_bundle_component(other)):
+            continue
+        other["owner_gid"], other["location"] = 0, V109_LOC_BAG
     subject["owner_gid"], subject["location"] = owner, slot
     effective.update(target_gid=owner, location=slot)
     return (f"v173 accessory equip item={item_id} character=0x{owner:016x} "
@@ -5492,7 +5576,7 @@ def _v140_select_player(uin):
     accessory_repairs = _v173_repair_accessory_owners()
     if accessory_repairs:
         _v140_save_state("character-accessory-owner-repair-v173")
-        log("MALL", f"v173 returned misplaced accessories to storage uin={uin} changes={accessory_repairs}")
+        log("MALL", f"v173 repaired character/accessory ownership uin={uin} changes={accessory_repairs}")
 
     return _V140_PLAYER_STATE.state()
 
