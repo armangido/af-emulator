@@ -10,10 +10,14 @@ The server now uses the PH item library's `MainShowType=1` and
 `Location=0/1/2/7` metadata to identify 119 character accessories. Accessory equip
 targets an owned character root and uses its canonical character socket. A
 generic storage location or wrong explicit location cannot route it into a
-weapon slot. Socket exclusivity applies only within that character. Normal
-weapon equip, character-root selection, accessory takeoff and backpack selection
-retain their existing paths. Accessory names containing “bag” cannot classify a
-waist pouch as a weapon backpack.
+weapon slot. Socket exclusivity applies only between standalone accessories on the
+same character. Character bundle components, including the default hair
+parts, stay attached when a head accessory uses the same numeric socket. Login
+repairs bundle components that an earlier build moved into storage, restoring
+the component to its matching character root. Normal weapon equip,
+character-root selection, accessory takeoff and backpack selection retain their
+existing paths. Accessory names containing “bag” cannot classify a waist pouch
+as a weapon backpack.
 
 On player load, accessories incorrectly mounted on backpacks or literal root
 owner 1 return to storage and persist through the existing SQLite transaction.
