@@ -22,6 +22,10 @@ bag = s._v141_current_bag_gid()
 weapon_ids = {100497, 100009, 100058, 100010}
 weapons = {int(p['gid']): copy.deepcopy(p) for p in s.V111_INVENTORY
            if p['item_id'] in weapon_ids}
+sofia_hair = s._v140_find_prop(s.V129_SOFIA_HAIR_GID)
+assert sofia_hair['owner_gid'] == role and sofia_hair['location'] == s.V129_LOC_HAIR
+assert s.V173_CHARACTER_BUNDLE_COMPONENT_ROLE_ITEMS[100602] == frozenset((100600,))
+assert s.V173_CHARACTER_BUNDLE_COMPONENT_ROLE_ITEMS[100601] == frozenset((100599,))
 
 def make(item_id):
     prop = s._v140_make_prop(s._v140_next_gid(), item_id)
@@ -41,7 +45,17 @@ for prop, requested, slot in zip(accessories, (12, 1, 2), (0, 1, 2)):
     assert effective['target_gid'] == role and effective['location'] == slot
     assert 'accessory equip' in action
     assert len(s._v111_pack_prop_operation(effective)) == 19
+assert sofia_hair['owner_gid'] == role and sofia_hair['location'] == s.V129_LOC_HAIR
 assert all(s._v140_find_prop(gid) == prop for gid, prop in weapons.items())
+
+# A purchased character bundle's hair stays mounted when headwear is equipped.
+angela_bundle = s._v140_build_commodity_props(200592)
+s.V111_INVENTORY.extend(angela_bundle)
+angela_role, _, _, angela_hair = angela_bundle
+angela_hat = make(100609)
+equip(angela_hat, angela_role['gid'], 12)
+assert angela_hair['owner_gid'] == angela_role['gid'] and angela_hair['location'] == 0
+assert s._v173_is_character_bundle_component(angela_hair)
 
 # Wrong explicit socket and backpack targets cannot turn a hat into a gun.
 _, effective = equip(accessories[0], bag, 3)
@@ -59,9 +73,11 @@ s._v111_apply_prop_operation(dict(operation=s.PROP_OP_TAKEOFF,
     subject_gid=second_hat['gid'], target_gid=0, location=0))
 assert second_hat['owner_gid'] == 0 and second_hat['location'] == 12
 
-# Persist the old broken attachments and reload from SQLite, as at login.
+# Persist the old broken attachments and a hair component displaced by
+# the old slot-exclusivity behavior, then verify login repairs both.
 for prop, slot in zip(accessories, (0, 1, 2)):
     prop.update(owner_gid=bag, location=slot)
+sofia_hair.update(owner_gid=0, location=s.V109_LOC_BAG)
 s._v140_save_state('test-corrupt-accessory-owners')
 before = copy.deepcopy(list(s.V111_INVENTORY))
 wallet = copy.deepcopy(s._v140_wallet())
@@ -77,6 +93,12 @@ for prop in accessories:
     old = next(p for p in before if p['gid'] == prop['gid'])
     assert {k:v for k,v in repaired.items() if k not in ('owner_gid', 'location')} == {
         k:v for k,v in old.items() if k not in ('owner_gid', 'location')}
+restored_hair = s._v140_find_prop(sofia_hair['gid'])
+assert restored_hair['owner_gid'] == role and restored_hair['location'] == s.V129_LOC_HAIR
+assert any(
+    p['gid'] == sofia_hair['gid'] and p['owner_gid'] == role
+    and p['location'] == s.V129_LOC_HAIR for p in saved['inventory']
+)
 assert all(s._v140_find_prop(gid) == prop for gid, prop in weapons.items())
 once = copy.deepcopy(list(s.V111_INVENTORY))
 s._v140_select_player(10001)
